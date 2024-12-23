@@ -1,3 +1,6 @@
+%pip install lightgbm
+%pip install xgboost
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -7,7 +10,7 @@ from sklearn.tree import DecisionTreeRegressor
 from xgboost import XGBRegressor
 
 # File path and relevant BSO sheets
-file_path = "/path/to/your/file.xlsx"
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
 bso_sheets = {
     'USFFC': 'FFC Proj',
     'RESFOR': 'RESFOR Proj',
@@ -16,11 +19,7 @@ bso_sheets = {
 
 # Model Mapping Dictionary: BSO, KPI Column, and Best Model
 model_mapping = {
-    # Replace with the actual values from your data
-    ('USFFC', 'KPI1'): 'Linear Regression',
-    ('USFFC', 'KPI2'): 'Gradient Boosting',
-    ('PACFLT', 'KPI3'): 'XGBoost Regressor',
-    # Add more mappings as needed
+    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor', ('USFFC', 'RBC Level- Total Negative Billed'): 'XGBoost Regressor', ('USFFC', 'RBC Level- Total Negative Authorizations'): 'Gradient Boosting', ('USFFC', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree', ('USFFC', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Gradient Boosting', ('USFFC', 'Permanent Journal Vouchers'): 'Linear Regression', ('USFFC', 'OTA w/ Closed RON'): 'Linear Regression', ('USFFC', 'Negative Liquidations - Other'): 'XGBoost Regressor', ('USFFC', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('USFFC', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor', ('USFFC', 'Cost Transfer Allocation - "COE"'): 'Decision Tree', ('USFFC', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('USFFC', 'Cost Transfer Allocation - "L"'): 'Decision Tree', ('USFFC', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('USFFC', 'Invalid LOA'): 'Linear Regression', ('RESFOR', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('RESFOR', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'Decision Tree', ('RESFOR', 'RBC Level- Total Negative Billed'): 'Linear Regression', ('RESFOR', 'RBC Level- Total Negative Authorizations'): 'Linear Regression', ('RESFOR', 'RON Level- Total Negative Reimbursable Collected'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'XGBoost Regressor', ('RESFOR', 'Permanent Journal Vouchers'): 'Linear Regression', ('RESFOR', 'OTA w/ Closed RON'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Other'): 'Gradient Boosting', ('RESFOR', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Foreign Currency'): 'Linear Regression', ('RESFOR', 'Cost Transfer Allocation - "COE"'): 'Linear Regression', ('RESFOR', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('RESFOR', 'Cost Transfer Allocation - "L"'): 'Linear Regression', ('RESFOR', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('RESFOR', 'Invalid LOA'): 'Linear Regression', ('PACFLT', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('PACFLT', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor', ('PACFLT', 'RBC Level- Total Negative Billed'): 'Decision Tree', ('PACFLT', 'RBC Level- Total Negative Authorizations'): 'Decision Tree', ('PACFLT', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree', ('PACFLT', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Decision Tree', ('PACFLT', 'Permanent Journal Vouchers'): 'Linear Regression', ('PACFLT', 'OTA w/ Closed RON'): 'Linear Regression', ('PACFLT', 'Negative Liquidations - Other'): 'Decision Tree', ('PACFLT', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('PACFLT', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor', ('PACFLT', 'Cost Transfer Allocation - "COE"'): 'Decision Tree', ('PACFLT', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('PACFLT', 'Cost Transfer Allocation - "L"'): 'XGBoost Regressor', ('PACFLT', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('PACFLT', 'Invalid LOA'): 'Linear Regression'
 }
 
 # Function to replace NA with zeros
@@ -141,5 +140,3 @@ updated_bso_data = process_bso_sheets(file_path, bso_sheets, model_mapping)
 
 # Consolidate all results into a single DataFrame
 consolidated_results = consolidate_results(updated_bso_data)
-
-
