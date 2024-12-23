@@ -1,186 +1,92 @@
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, ElasticNet
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
-
-# File path and relevant BSO sheets
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-bso_sheets = {
-   'USFFC': 'FFC Proj',
-   'RESFOR': 'RESFOR Proj',
-   'PACFLT': 'PACFLT Proj'
-}
-
-# The all_results DataFrame is assumed to already exist in the script
-# Example structure for reference:
-# all_results = pd.DataFrame({
-#     'BSO': [...],
-#     'KPI Column': [...],
-#     'Best Model': [...],
-#     'Fit Analysis': [...],
-# })
-
-# Function to replace NA with zeros
-def replace_na_with_zeros(df):
-   return df.fillna(0)
-
-# Function to process each BSO sheet and make predictions
 def process_bso_sheets(file_path, bso_sheets, all_results):
-   predictions_by_bso = {}
-   
-   for bso, sheet_name in bso_sheets.items():
-       print(f"Processing BSO: {bso}, Sheet: {sheet_name}")
-       
-       # Read the sheet
-       data = pd.read_excel(file_path, sheet_name=sheet_name)
-       data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-       
-       # Check for invalid dates
-       if data['Date'].isnull().any():
-           print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
-           earliest_date = data['Date'].min()
-           data['Date'].fillna(earliest_date, inplace=True)
-       
-       last_date = data['Date'].max()
-       print(f"Last Date in {sheet_name}: {last_date}")
-       
-       future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
-       print(f"Future Dates: {future_dates}")
-       
-       for kpi_column in data.columns:
-           if kpi_column in ['Date', 'BSO']:
-               continue  # Skip non-KPI columns
-           
-           model_row = all_results[
-               (all_results['BSO'] == bso) &
-               (all_results['KPI Column'] == kpi_column) &
-               (all_results['Fit Analysis'] == 'Good Fit')
-           ]
-           
-           if model_row.empty:
-               print(f"No valid model found for KPI: {kpi_column} in BSO: {bso}. Skipping.")
-               continue
-           
-           best_model_name = model_row.iloc[0]['Best Model']
-           print(f"Using Model: {best_model_name} for KPI: {kpi_column}, BSO: {bso}")
-           
-           X = data[['Date']].copy()
-           X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-           X['Year'] = X['Date'].dt.year
-           X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
-           
-           y = data[kpi_column].values
-           print(f"Target Values (y) for {kpi_column}, {bso}: {y}")
-           
-           # Train the model
-           if best_model_name == 'XGBoost Regressor':
-               model = XGBRegressor(random_state=42)
-           elif best_model_name == 'Gradient Boosting':
-               model = GradientBoostingRegressor(random_state=42)
-           elif best_model_name == 'Decision Tree':
-               model = DecisionTreeRegressor(random_state=42)
-           elif best_model_name == 'Linear Regression':
-               model = LinearRegression()
-           elif best_model_name == 'ElasticNet(alpha=0.1)':
-               model = ElasticNet(alpha=0.1, random_state=42)
-           else:
-               print(f"Unknown Model: {best_model_name} for {kpi_column}. Skipping.")
-               continue
-           
-           X_train, X_test, y_train, y_test = train_test_split(
-               X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
-           
-           model.fit(X_train, y_train)
-           print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
-           
-           future_features = pd.DataFrame({'Date': future_dates})
-           future_features['WeekOfYear'] = future_features['Date'].dt.isocalendar().week
-           future_features['Year'] = future_features['Date'].dt.year
-           future_features['DateNumeric'] = future_features['Date'].map(pd.Timestamp.toordinal)
-           
-           print(f"Future Features: {future_features}")
-           
-           future_predictions = model.predict(future_features[['DateNumeric', 'WeekOfYear', 'Year']])
-           print(f"Predictions: {future_predictions}")
-           
-           for date, prediction in zip(future_dates, future_predictions):
-               data = data.append({'Date': date, kpi_column: prediction}, ignore_index=True)
-       
-       predictions_by_bso[bso] = data
-       print(f"Completed processing for BSO: {bso}")
-   
-   return predictions_by_bso
-
-
-# Main section to process all BSO sheets
-updated_bso_data = process_bso_sheets(file_path, bso_sheets, all_results)
-
-# Access updated data for each BSO
-for bso, updated_data in updated_bso_data.items():
-   print(f"Updated DataFrame for {bso}:\n", updated_data.head())
-
-error message: 
-Processing BSO: USFFC, Sheet: FFC Proj
-Invalid dates found in sheet: FFC Proj. Replacing with earliest valid date.
-Last Date in FFC Proj: 2024-12-23 00:00:00
-Future Dates: [Timestamp('2024-12-30 00:00:00'), Timestamp('2025-01-06 00:00:00'), Timestamp('2025-01-13 00:00:00')]
-No valid model found for KPI: Negative Unliquidated Orders (NULOs) in BSO: USFFC. Skipping.
-Using Model: XGBoost Regressor for KPI: NULOs that Remain High Priority, BSO: USFFC
-Target Values (y) for NULOs that Remain High Priority, USFFC: [28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.
- 28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.
- 28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.  28.
- 52.  50.  43.  41.  45.  55.  50.  39.  39.  46.  40.  34.  33.  48.
- 36.  36.  26.  33.  31.  29.  39.  52.  46.  42.  42.  45.  54.  50.
- 41.  39.  35.1  nan]
-Model trained successfully for KPI: NULOs that Remain High Priority, BSO: USFFC
-Future Features:         Date  WeekOfYear  Year  DateNumeric
-0 2024-12-30           1  2024       739250
-1 2025-01-06           2  2025       739257
-2 2025-01-13           3  2025       739264
-Predictions: [35.104965 35.104965 35.104965]
-No valid model found for KPI: NULOs Medium Priorities in BSO: USFFC. Skipping.
-No valid model found for KPI: NULOs Eligible for PO+UMD in BSO: USFFC. Skipping.
-No valid model found for KPI: Labor NULOs that Loads as JV in BSO: USFFC. Skipping.
-Using Model: XGBoost Regressor for KPI: Billing exceeds Authorization (Abnormal Unfilled Customer Orders), BSO: USFFC
-Target Values (y) for Billing exceeds Authorization (Abnormal Unfilled Customer Orders), USFFC: [33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.
- 33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.
- 33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.  33.
- 33.  33.  33.  33.  33.  33.  33.  34.  36.  38.  34.  35.  36.  36.
- 35.  32.  30.  29.  30.  54.  31.  31.  28.  26.  27.  27.  27.  25.
- 25.  25.  22.5  nan  nan  nan  nan]
-/home/spark-1ab30263-9125-48ff-af20-89/.ipykernel/7093/command-2638992667497585-3608590727:110: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
-  data = data.append({'Date': date, kpi_column: prediction}, ignore_index=True)
-/home/spark-1ab30263-9125-48ff-af20-89/.ipykernel/7093/command-2638992667497585-3608590727:110: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
-  data = data.append({'Date': date, kpi_column: prediction}, ignore_index=True)
-/home/spark-1ab30263-9125-48ff-af20-89/.ipykernel/7093/command-2638992667497585-3608590727:110: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
-  data = data.append({'Date': date, kpi_column: prediction}, ignore_index=True)
-XGBoostError: [19:34:45] /workspace/src/data/data.cc:514: Check failed: valid: Label contains NaN, infinity or a value too large.
-Stack trace:
-  [bt] (0) /local_disk0/.ephemeral_nfs/envs/pythonEnv-1ab30263-9125-48ff-af20-89d3fac4ebdb/lib/python3.10/site-packages/xgboost/lib/libxgboost.so(+0x22dcbc) [0x7fbefc42dcbc]
-  [bt] (1) /local_disk0/.ephemeral_nfs/envs/pythonEnv-1ab30263-9125-48ff-af20-89d3fac4ebdb/lib/python3.10/site-packages/xgboost/lib/libxgboost.so(+0x4b3b89) [0x7fbefc6b3b89]
-  [bt] (2) /local_disk0/.ephemeral_nfs/envs/pythonEnv-1ab30263-9125-48ff-af20-89d3fac4ebdb/lib/python3.10/site-packages/xgboost/lib/libxgboost.so(+0x4b53c0) [0x7fbefc6b53c0]
-  [bt] (3) /local_disk0/.ephemeral_nfs/envs/pythonEnv-1ab30263-9125-48ff-af20-89d3fac4ebdb/lib/python3.10/site-packages/xgboost/lib/libxgboost.so(XGDMatrixSetInfoFromInterface+0xb2) [0x7fbefc335032]
-  [bt] (4) /lib/x86_64-linux-gnu/libffi.so.8(+0x7e2e) [0x7fc0edc8ce2e]
-  [bt] (5) /lib/x86_64-linux-gnu/libffi.so.8(+0x4493) [0x7fc0edc89493]
-  [bt] (6) /usr/lib/python3.10/lib-dynload/_ctypes.cpython-310-x86_64-linux-gnu.so(+0xa3e9) [0x7fc0edca63e9]
-  [bt] (7) /usr/lib/python3.10/lib-dynload/_ctypes.cpython-310-x86_64-linux-gnu.so(+0x9a00) [0x7fc0edca5a00]
-  [bt] (8) /local_disk0/.ephemeral_nfs/envs/pythonEnv-1ab30263-9125-48ff-af20-89d3fac4ebdb/bin/python(_PyObject_MakeTpCall+0x25b) [0x56399d1ab2db]
-
-File <command-2638992667497585>, line 119
-    115    return predictions_by_bso
-    118 # Main section to process all BSO sheets
---> 119 updated_bso_data = process_bso_sheets(file_path, bso_sheets, all_results)
-    121 # Access updated data for each BSO
-    122 for bso, updated_data in updated_bso_data.items():
-File /local_disk0/.ephemeral_nfs/envs/pythonEnv-1ab30263-9125-48ff-af20-89d3fac4ebdb/lib/python3.10/site-packages/xgboost/core.py:284, in _check_call(ret)
-    273 """Check the return value of C API call
-    274 
-    275 This function will raise exception when error occurs.
-   (...)
-    281     return value from API calls
-    282 """
-    283 if ret != 0:
---> 284     raise XGBoostError(py_str(_LIB.XGBGetLastError()))
+    predictions_by_bso = {}
+    
+    for bso, sheet_name in bso_sheets.items():
+        print(f"Processing BSO: {bso}, Sheet: {sheet_name}")
+        
+        # Read the sheet
+        data = pd.read_excel(file_path, sheet_name=sheet_name)
+        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+        
+        # Handle invalid dates
+        if data['Date'].isnull().any():
+            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
+            earliest_date = data['Date'].dropna().min()
+            data['Date'].fillna(earliest_date, inplace=True)
+        
+        last_date = data['Date'].max()
+        print(f"Last Date in {sheet_name}: {last_date}")
+        
+        future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
+        print(f"Future Dates: {future_dates}")
+        
+        for kpi_column in data.columns:
+            if kpi_column in ['Date', 'BSO']:
+                continue  # Skip non-KPI columns
+            
+            model_row = all_results[
+                (all_results['BSO'] == bso) &
+                (all_results['KPI Column'] == kpi_column) &
+                (all_results['Fit Analysis'] == 'Good Fit')
+            ]
+            
+            if model_row.empty:
+                print(f"No valid model found for KPI: {kpi_column} in BSO: {bso}. Skipping.")
+                continue
+            
+            best_model_name = model_row.iloc[0]['Best Model']
+            print(f"Using Model: {best_model_name} for KPI: {kpi_column}, BSO: {bso}")
+            
+            X = data[['Date']].copy()
+            X['WeekOfYear'] = X['Date'].dt.isocalendar().week
+            X['Year'] = X['Date'].dt.year
+            X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
+            
+            y = data[kpi_column].values
+            print(f"Target Values (y) for {kpi_column}, {bso}: {y}")
+            
+            # Validate `y` values
+            if np.any(np.isnan(y)) or np.any(np.isinf(y)) or np.any(y > 1e6):
+                print(f"Invalid target values found in KPI column {kpi_column} for BSO {bso}. Skipping...")
+                continue
+            
+            # Train the model
+            if best_model_name == 'XGBoost Regressor':
+                model = XGBRegressor(random_state=42)
+            elif best_model_name == 'Gradient Boosting':
+                model = GradientBoostingRegressor(random_state=42)
+            elif best_model_name == 'Decision Tree':
+                model = DecisionTreeRegressor(random_state=42)
+            elif best_model_name == 'Linear Regression':
+                model = LinearRegression()
+            elif best_model_name == 'ElasticNet(alpha=0.1)':
+                model = ElasticNet(alpha=0.1, random_state=42)
+            else:
+                print(f"Unknown Model: {best_model_name} for {kpi_column}. Skipping.")
+                continue
+            
+            X_train, X_test, y_train, y_test = train_test_split(
+                X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
+            
+            model.fit(X_train, y_train)
+            print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
+            
+            # Prepare future features
+            future_features = pd.DataFrame({'Date': future_dates})
+            future_features['WeekOfYear'] = future_features['Date'].dt.isocalendar().week
+            future_features['Year'] = future_features['Date'].dt.year
+            future_features['DateNumeric'] = future_features['Date'].map(pd.Timestamp.toordinal)
+            
+            print(f"Future Features: {future_features}")
+            
+            future_predictions = model.predict(future_features[['DateNumeric', 'WeekOfYear', 'Year']])
+            print(f"Predictions: {future_predictions}")
+            
+            # Add predictions to the data
+            new_rows = pd.DataFrame({'Date': future_dates, kpi_column: future_predictions})
+            data = pd.concat([data, new_rows], ignore_index=True)
+        
+        predictions_by_bso[bso] = data
+        print(f"Completed processing for BSO: {bso}")
+    
+    return predictions_by_bso
