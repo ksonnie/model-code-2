@@ -1,96 +1,28 @@
-def process_bso_sheets_weekly(file_path, bso_sheets, model_mapping):
-    predictions_by_bso = {}
-    
-    for bso, sheet_name in bso_sheets.items():
-        print(f"Processing BSO: {bso}, Sheet: {sheet_name}")
-        
-        # Read the sheet
-        data = pd.read_excel(file_path, sheet_name=sheet_name)
-        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-        
-        # Handle invalid dates
-        if data['Date'].isnull().any():
-            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
-            earliest_date = data['Date'].dropna().min()
-            data['Date'].fillna(earliest_date, inplace=True)
-        
-        last_date = data['Date'].max()
-        print(f"Last Date in {sheet_name}: {last_date}")
-        
-        for kpi_column in data.columns:
-            if kpi_column in ['Date', 'BSO']:
-                continue  # Skip non-KPI columns
-            
-            model_key = (bso, kpi_column)
-            if model_key not in model_mapping:
-                print(f"No valid model found for KPI: {kpi_column} in BSO: {bso}. Skipping.")
-                continue
-            
-            best_model_name = model_mapping[model_key]
-            print(f"Using Model: {best_model_name} for KPI: {kpi_column}, BSO: {bso}")
-            
-            # Prepare features
-            X = data[['Date']].copy()
-            X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
-            
-            y = data[kpi_column].values
-            
-            # Validate `y` values
-            if np.any(np.isnan(y)) or np.any(np.isinf(y)) or np.any(y > 1e6):
-                print(f"Invalid target values found in KPI column {kpi_column} for BSO {bso}. Skipping...")
-                continue
-            
-            # Train the model
-            if best_model_name == 'XGBoost Regressor':
-                model = XGBRegressor(random_state=42)
-            elif best_model_name == 'Gradient Boosting':
-                model = GradientBoostingRegressor(random_state=42)
-            elif best_model_name == 'Decision Tree':
-                model = DecisionTreeRegressor(random_state=42)
-            elif best_model_name == 'Linear Regression':
-                model = LinearRegression()
-            elif best_model_name == 'ElasticNet(alpha=0.1)':
-                model = ElasticNet(alpha=0.1, random_state=42)
-            else:
-                print(f"Unknown Model: {best_model_name} for {kpi_column}. Skipping.")
-                continue
-            
-            X_train, X_test, y_train, y_test = train_test_split(
-                X[['DateNumeric']], y, test_size=0.2, random_state=42)
-            
-            model.fit(X_train, y_train)
-            print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
-            
-            # Iteratively predict future values
-            for i in range(3):  # Predict for the next 3 weeks
-                future_date = last_date + pd.Timedelta(weeks=i+1)
-                
-                future_features = pd.DataFrame({'Date': [future_date]})
-                future_features['DateNumeric'] = future_features['Date'].map(pd.Timestamp.toordinal)
-                
-                print(f"Future Features: {future_features}")
-                
-                future_prediction = model.predict(future_features[['DateNumeric']])
-                print(f"Prediction for {future_date}: {future_prediction}")
-                
-                # Append prediction to the data
-                new_row = pd.DataFrame({'Date': [future_date], kpi_column: future_prediction[0]})
-                data = pd.concat([data, new_row], ignore_index=True)
-                
-                # Update last_date
-                last_date = future_date
-                
-                # Retrain the model with the updated dataset
-                X = data[['Date']].copy()
-                X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
-                y = data[kpi_column].values
-                model.fit(X[['DateNumeric']], y)
-                print(f"Model retrained successfully after including prediction for {future_date}")
-        
-        predictions_by_bso[bso] = data
-        print(f"Completed processing for BSO: {bso}")
-    
-    return predictions_by_bso
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression, ElasticNet
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+from xgboost import XGBRegressor
 
-# Main section to process and display results
-updated_bso_data = process_bso_sheets_weekly(file_path, bso_sheets, model_mapping)
+# File path and relevant BSO sheets
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+bso_sheets = {
+   'USFFC': 'FFC Proj',
+   'RESFOR': 'RESFOR Proj',
+   'PACFLT': 'PACFLT Proj'
+}
+
+# Dictionary specifying BSO, KPI, and model
+model_mapping = {
+    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor',
+    ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'Gradient Boosting',
+    ('RESFOR', 'RBC Level - Total Negative Billed'): 'Decision Tree',
+    ('PACFLT', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression',
+    ('PACFLT', 'Cost Transfer Allocation - "L"'): 'ElasticNet(alpha=0.1)',
+}
+
+# Function to replace NA with zeros
+def replace_na_with_zeros(df):
+    return df.fillna(0)
