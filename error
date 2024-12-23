@@ -1,97 +1,112 @@
-# Function to process BSO sheets and make predictions
-def process_bso_sheets(file_path, bso_sheets, model_mapping):
-    consolidated_data = []
+import pandas as pd
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.preprocessing import MinMaxScaler
+import numpy as np
 
-    for (bso, kpi_column), best_model_name in model_mapping.items():
-        print(f"Processing BSO: {bso}, KPI: {kpi_column}, Model: {best_model_name}")
+# Load the Excel file
+def load_data(sheet_name):
+   data = pd.read_excel("/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx", sheet_name=sheet_name)
+   data.fillna(0, inplace=True)  # Replace NaNs with 0
+   return data
 
-        # Identify the corresponding sheet for this BSO
-        if bso not in bso_sheets:
-            print(f"BSO {bso} not found in bso_sheets. Skipping.")
-            continue
+# Define the list of KPI columns
+kpi_columns = [
+   "NULOs that Remain High Priority",
+   "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
+   "RBC Level- Total Negative Billed",
+   "RBC Level- Total Negative Authorizations",
+   "RON Level- Total Negative Reimbursable Collected",
+   # Add additional KPI columns as needed
+]
 
-        sheet_name = bso_sheets[bso]
+# Function to generate cumulative predictions for the next three weeks
+def generate_cumulative_predictions(data, kpi_column):
+   # Prepare data
+   data['DateNumeric'] = pd.to_datetime(data['Date']).map(pd.Timestamp.toordinal)
+   X = data[['DateNumeric']]
+   y = data[kpi_column]
+   
+   scaler = MinMaxScaler()
+   X_scaled = scaler.fit_transform(X)
 
-        # Read the relevant sheet
-        data = pd.read_excel(file_path, sheet_name=sheet_name)
-        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+   # Initialize and train the model on all historical data
+   model = GradientBoostingRegressor(random_state=42)
+   model.fit(X_scaled, y)
 
-        # Handle invalid dates
-        if data['Date'].isnull().any():
-            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
-            earliest_date = data['Date'].dropna().min()
-            data['Date'].fillna(earliest_date, inplace=True)
+   # Start predictions one week after the maximum date in the dataset
+   future_predictions = []
+   last_date = pd.to_datetime(data['Date']).max()  # Get the maximum date in the data
+   first_prediction_date = last_date + pd.DateOffset(days=7)  # Start predictions on the week after last_date
 
-        last_date = data['Date'].max()
-        print(f"Last Date in {sheet_name}: {last_date}")
+   for i in range(3):  # Predict for three future weeks
+       next_date = first_prediction_date + pd.DateOffset(days=7 * i)  # Increment by 7 days for each prediction
+       next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+       next_prediction = model.predict([[next_date_numeric]])[0]
+       
+       future_predictions.append({
+           'Date': next_date,
+           'KPI': kpi_column,
+           'Prediction': next_prediction
+       })
 
-        # Prepare data for modeling
-        if kpi_column not in data.columns:
-            print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
-            continue
+       # Update model training data with the predicted value for cumulative prediction
+       X_scaled = np.append(X_scaled, [[next_date_numeric]], axis=0)
+       y = np.append(y, next_prediction)
+       model.fit(X_scaled, y)  # Retrain with added predicted point
 
-        X = data[['Date']].copy()
-        X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-        X['Year'] = X['Date'].dt.year
-        X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
+   return future_predictions
 
-        y = data[kpi_column].values
-        if np.any(np.isnan(y)) or np.any(np.isinf(y)):
-            print(f"Invalid values in KPI column {kpi_column} for BSO {bso}. Skipping...")
-            continue
+# Main function to process each KPI and generate predictions, then append to original data
+def process_bso(sheet_name, bso_name):
+   data = load_data(sheet_name)
+   original_data = data.copy()
+   predictions_list = []
 
-        # Train the model
-        if best_model_name == 'XGBoost Regressor':
-            model = XGBRegressor(random_state=42)
-        elif best_model_name == 'Gradient Boosting':
-            model = GradientBoostingRegressor(random_state=42)
-        elif best_model_name == 'Decision Tree':
-            model = DecisionTreeRegressor(random_state=42)
-        elif best_model_name == 'Linear Regression':
-            model = LinearRegression()
-        elif best_model_name == 'ElasticNet(alpha=0.1)':
-            model = ElasticNet(alpha=0.1, random_state=42)
-        else:
-            print(f"Unknown Model: {best_model_name} for KPI: {kpi_column}. Skipping.")
-            continue
+   for kpi_column in kpi_columns:
+       if kpi_column in data.columns:
+           print(f"Processing KPI: {kpi_column} for BSO: {bso_name}")
+           
+           # Generate cumulative predictions for the KPI column
+           future_predictions = generate_cumulative_predictions(data, kpi_column)
 
-        try:
-            X_train, X_test, y_train, y_test = train_test_split(
-                X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
-            model.fit(X_train, y_train)
-            print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
+           # Store each predicted value in a list, including the BSO and Date
+           for entry in future_predictions:
+               predictions_list.append({
+                   'BSO': bso_name,
+                   'Date': entry['Date'],
+                   'KPI': kpi_column,
+                   'Prediction': entry['Prediction']
+               })
 
-            # Iteratively predict for each future date
-            for _ in range(3):  # Predict for the next 3 weeks
-                # Calculate next future date
-                next_date = last_date + pd.Timedelta(days=7)
+   # Convert the predictions list to a DataFrame
+   predictions_df = pd.DataFrame(predictions_list)
 
-                # Prepare data for the future date
-                future_feature = pd.DataFrame({'Date': [next_date]})
-                future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
-                future_feature['Year'] = future_feature['Date'].dt.year
-                future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
+   # Prepare three new rows to append to the original data with zero-filling
+   unique_dates = predictions_df['Date'].unique()
+   for date in unique_dates:
+       new_row = {col: 0 for col in original_data.columns}  # Set all columns to zero initially
+       new_row['Date'] = date
+       new_row['BSO'] = bso_name  # Set BSO for the new row
 
-                future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
-                print(f"Prediction for {next_date}: {future_prediction}")
+       # Assign predicted values to the corresponding KPI columns
+       for _, row in predictions_df[predictions_df['Date'] == date].iterrows():
+           kpi_col = row['KPI']
+           prediction_value = row['Prediction']
+           new_row[kpi_col] = prediction_value  # Only set predicted value for KPI columns
 
-                # Add the prediction as part of historical data
-                new_row = {'Date': next_date, kpi_column: future_prediction}
-                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+       # Append the new row to the original data
+       original_data = original_data.append(new_row, ignore_index=True)
 
-                # Update last_date for the next iteration
-                last_date = next_date
+   # Convert 'Date' to datetime format if necessary and sort by date
+   original_data['Date'] = pd.to_datetime(original_data['Date'])
+   original_data = original_data.sort_values(by='Date').reset_index(drop=True)
 
-        except Exception as e:
-            print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
-            continue
+   return original_data
 
-        consolidated_data.append(data)
+# Example usage
+bso_name = 'USFFC'
+sheet_name = 'FFC Proj'
+final_data_with_predictions = process_bso(sheet_name, bso_name)
 
-    # Combine all data into a single DataFrame
-    consolidated_df = pd.concat(consolidated_data, ignore_index=True)
-    return consolidated_df
-
-# Process all BSO sheets and consolidate the results
-consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-
+# Display the final output
+print(final_data_with_predictions)
