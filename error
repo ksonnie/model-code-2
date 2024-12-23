@@ -1,3 +1,32 @@
+%pip install lightgbm
+%pip install xgboost
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression, ElasticNet
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+from xgboost import XGBRegressor
+
+# File path and relevant BSO sheets
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+bso_sheets = {
+   'USFFC': 'FFC Proj',
+   'RESFOR': 'RESFOR Proj',
+   'PACFLT': 'PACFLT Proj'
+}
+
+# Dictionary specifying BSO, KPI, and model
+model_mapping = {
+    (row['BSO'], row['KPI Column']): row['Best Model']
+    for _, row in all_results.iterrows()
+}
+
+# Function to replace NA with zeros
+def replace_na_with_zeros(df):
+    return df.fillna(0)
+
+
 def process_bso_sheets_with_mapping(file_path, bso_sheets, model_mapping):
     predictions_by_bso = {}
 
@@ -108,4 +137,3 @@ def consolidate_results(predictions_by_bso):
 
 # Consolidate all results into a single DataFrame
 consolidated_results = consolidate_results(updated_bso_data)
-
