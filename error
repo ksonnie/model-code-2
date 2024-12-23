@@ -1,107 +1,141 @@
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LinearRegression
+from xgboost import XGBRegressor
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_absolute_error
 import numpy as np
 
 # Load the Excel file
 def load_data(sheet_name):
-   data = pd.read_excel("/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx", sheet_name=sheet_name)
-   data.fillna(0, inplace=True)  # Replace NaNs with 0
-   return data
+    data = pd.read_excel(
+        "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx",
+        sheet_name=sheet_name
+    )
+    data.fillna(0, inplace=True)  # Replace NaNs with 0
+    return data
 
 # Define the list of KPI columns
 kpi_columns = [
-   "NULOs that Remain High Priority",
-   "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
-   "RBC Level- Total Negative Billed",
-   "RBC Level- Total Negative Authorizations",
-   "RON Level- Total Negative Reimbursable Collected",
-   # Add additional KPI columns as needed
+    "NULOs that Remain High Priority",
+    "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
+    "RBC Level- Total Negative Billed",
+    "RBC Level- Total Negative Authorizations",
+    "RON Level- Total Negative Reimbursable Collected",
 ]
+
+# Models to test
+models = {
+    "Gradient Boosting": GradientBoostingRegressor(random_state=42),
+    "Decision Tree": DecisionTreeRegressor(random_state=42),
+    "Linear Regression": LinearRegression(),
+    "XGBoost Regressor": XGBRegressor(random_state=42)
+}
 
 # Function to generate cumulative predictions for the next three weeks
 def generate_cumulative_predictions(data, kpi_column):
-   # Prepare data
-   data['DateNumeric'] = pd.to_datetime(data['Date']).map(pd.Timestamp.toordinal)
-   X = data[['DateNumeric']]
-   y = data[kpi_column]
-   
-   scaler = MinMaxScaler()
-   X_scaled = scaler.fit_transform(X)
+    # Prepare data
+    data['DateNumeric'] = pd.to_datetime(data['Date']).map(pd.Timestamp.toordinal)
+    X = data[['DateNumeric']]
+    y = data[kpi_column]
+    
+    scaler = MinMaxScaler()
+    X_scaled = scaler.fit_transform(X)
 
-   # Initialize and train the model on all historical data
-   model = GradientBoostingRegressor(random_state=42)
-   model.fit(X_scaled, y)
+    # Find the best model based on MAE
+    best_model = None
+    best_mae = float('inf')
 
-   # Start predictions one week after the maximum date in the dataset
-   future_predictions = []
-   last_date = pd.to_datetime(data['Date']).max()  # Get the maximum date in the data
-   first_prediction_date = last_date + pd.DateOffset(days=7)  # Start predictions on the week after last_date
+    for model_name, model in models.items():
+        try:
+            model.fit(X_scaled, y)
+            predictions = model.predict(X_scaled)
+            mae = mean_absolute_error(y, predictions)
+            
+            if mae < best_mae:
+                best_mae = mae
+                best_model = model
 
-   for i in range(3):  # Predict for three future weeks
-       next_date = first_prediction_date + pd.DateOffset(days=7 * i)  # Increment by 7 days for each prediction
-       next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
-       next_prediction = model.predict([[next_date_numeric]])[0]
-       
-       future_predictions.append({
-           'Date': next_date,
-           'KPI': kpi_column,
-           'Prediction': next_prediction
-       })
+            print(f"Model: {model_name}, MAE: {mae}")
+        except Exception as e:
+            print(f"Error with model {model_name}: {e}")
+            continue
 
-       # Update model training data with the predicted value for cumulative prediction
-       X_scaled = np.append(X_scaled, [[next_date_numeric]], axis=0)
-       y = np.append(y, next_prediction)
-       model.fit(X_scaled, y)  # Retrain with added predicted point
+    if not best_model:
+        print(f"No valid model found for KPI: {kpi_column}")
+        return []
 
-   return future_predictions
+    print(f"Best Model for {kpi_column}: {best_model.__class__.__name__}")
+
+    # Start predictions one week after the maximum date in the dataset
+    future_predictions = []
+    last_date = pd.to_datetime(data['Date']).max()
+    first_prediction_date = last_date + pd.DateOffset(days=7)
+
+    for i in range(3):  # Predict for three future weeks
+        next_date = first_prediction_date + pd.DateOffset(days=7 * i)
+        next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+        next_prediction = best_model.predict([[next_date_numeric]])[0]
+        
+        future_predictions.append({
+            'Date': next_date,
+            'KPI': kpi_column,
+            'Prediction': next_prediction
+        })
+
+        # Update model training data with the predicted value for cumulative prediction
+        X_scaled = np.append(X_scaled, [[next_date_numeric]], axis=0)
+        y = np.append(y, next_prediction)
+        best_model.fit(X_scaled, y)  # Retrain with added predicted point
+
+    return future_predictions
 
 # Main function to process each KPI and generate predictions, then append to original data
 def process_bso(sheet_name, bso_name):
-   data = load_data(sheet_name)
-   original_data = data.copy()
-   predictions_list = []
+    data = load_data(sheet_name)
+    original_data = data.copy()
+    predictions_list = []
 
-   for kpi_column in kpi_columns:
-       if kpi_column in data.columns:
-           print(f"Processing KPI: {kpi_column} for BSO: {bso_name}")
-           
-           # Generate cumulative predictions for the KPI column
-           future_predictions = generate_cumulative_predictions(data, kpi_column)
+    for kpi_column in kpi_columns:
+        if kpi_column in data.columns:
+            print(f"Processing KPI: {kpi_column} for BSO: {bso_name}")
+            
+            # Generate cumulative predictions for the KPI column
+            future_predictions = generate_cumulative_predictions(data, kpi_column)
 
-           # Store each predicted value in a list, including the BSO and Date
-           for entry in future_predictions:
-               predictions_list.append({
-                   'BSO': bso_name,
-                   'Date': entry['Date'],
-                   'KPI': kpi_column,
-                   'Prediction': entry['Prediction']
-               })
+            # Store each predicted value in a list, including the BSO and Date
+            for entry in future_predictions:
+                predictions_list.append({
+                    'BSO': bso_name,
+                    'Date': entry['Date'],
+                    'KPI': kpi_column,
+                    'Prediction': entry['Prediction']
+                })
 
-   # Convert the predictions list to a DataFrame
-   predictions_df = pd.DataFrame(predictions_list)
+    # Convert the predictions list to a DataFrame
+    predictions_df = pd.DataFrame(predictions_list)
 
-   # Prepare three new rows to append to the original data with zero-filling
-   unique_dates = predictions_df['Date'].unique()
-   for date in unique_dates:
-       new_row = {col: 0 for col in original_data.columns}  # Set all columns to zero initially
-       new_row['Date'] = date
-       new_row['BSO'] = bso_name  # Set BSO for the new row
+    # Prepare three new rows to append to the original data with zero-filling
+    unique_dates = predictions_df['Date'].unique()
+    for date in unique_dates:
+        new_row = {col: 0 for col in original_data.columns}  # Set all columns to zero initially
+        new_row['Date'] = date
 
-       # Assign predicted values to the corresponding KPI columns
-       for _, row in predictions_df[predictions_df['Date'] == date].iterrows():
-           kpi_col = row['KPI']
-           prediction_value = row['Prediction']
-           new_row[kpi_col] = prediction_value  # Only set predicted value for KPI columns
+        # Assign predicted values to the corresponding KPI columns
+        for _, row in predictions_df[predictions_df['Date'] == date].iterrows():
+            kpi_col = row['KPI']
+            prediction_value = row['Prediction']
+            new_row[kpi_col] = prediction_value
 
-       # Append the new row to the original data
-       original_data = original_data.append(new_row, ignore_index=True)
+        # Append the new row to the original data
+        original_data = pd.concat([original_data, pd.DataFrame([new_row])], ignore_index=True)
 
-   # Convert 'Date' to datetime format if necessary and sort by date
-   original_data['Date'] = pd.to_datetime(original_data['Date'])
-   original_data = original_data.sort_values(by='Date').reset_index(drop=True)
+    # Convert 'Date' to datetime format if necessary and sort by date
+    original_data['Date'] = pd.to_datetime(original_data['Date'])
+    original_data = original_data.sort_values(by='Date').reset_index(drop=True)
 
-   return original_data
+    return original_data
 
 # Example usage
 bso_name = 'USFFC'
