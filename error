@@ -1,33 +1,3 @@
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, ElasticNet
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
-
-# File path and relevant BSO sheets
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-bso_sheets = {
-    'USFFC': 'FFC Proj',
-    'RESFOR': 'RESFOR Proj',
-    'PACFLT': 'PACFLT Proj'
-}
-
-# Extract actual column names from model_mapping
-# Replace these with the exact column names from model_mapping
-bso_column = "BSO"  # Update this with the correct column name for BSO
-kpi_column = "KPI Column"  # Update with the correct column name for KPI column
-best_model_column = "Best Model"  # Update with the correct column name for the best model
-
-# Create model mapping dynamically
-model_mapping = {
-    (row[bso_column], row[kpi_column]): row[best_model_column]
-    for _, row in model_mapping.iterrows()
-}
-
-
-# Function to process BSO sheets
 def process_bso_sheets_with_mapping(file_path, bso_sheets, model_mapping):
     predictions_by_bso = {}
 
@@ -115,21 +85,3 @@ def process_bso_sheets_with_mapping(file_path, bso_sheets, model_mapping):
         print(f"Completed processing for BSO: {bso}, KPI: {kpi_column}")
 
     return predictions_by_bso
-
-
-# Call the processing function
-updated_bso_data = process_bso_sheets_with_mapping(file_path, bso_sheets, model_mapping)
-
-# Consolidate results into a single DataFrame
-def consolidate_results(predictions_by_bso):
-    consolidated_data = []
-    for bso, data in predictions_by_bso.items():
-        data['BSO'] = bso  # Add a BSO column to identify the source
-        consolidated_data.append(data)
-    # Combine all data into a single DataFrame
-    consolidated_df = pd.concat(consolidated_data, ignore_index=True)
-    return consolidated_df
-
-# Consolidate and display
-consolidated_results = consolidate_results(updated_bso_data)
-print(consolidated_results.head())
