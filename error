@@ -1,6 +1,3 @@
-%pip install lightgbm
-%pip install xgboost
-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -17,15 +14,7 @@ bso_sheets = {
     'PACFLT': 'PACFLT Proj'
 }
 
-# Example all_results DataFrame
-all_results = pd.DataFrame({
-    'BSO': ['USFFC', 'RESFOR', 'PACFLT'],
-    'KPI Column': ['KPI1', 'KPI2', 'KPI3'],
-    'Best Model': ['XGBoost Regressor', 'Linear Regression', 'Gradient Boosting'],
-    'Fit Analysis': ['Good Fit', 'Good Fit', 'Good Fit']
-})
-
-# Create model mapping
+# Create model mapping directly from all_results DataFrame
 model_mapping = {
     (row['BSO'], row['KPI Column']): row['Best Model']
     for _, row in all_results.iterrows()
@@ -124,21 +113,17 @@ def process_bso_sheets_with_mapping(file_path, bso_sheets, model_mapping):
     return predictions_by_bso
 
 # Consolidate results
-updated_bso_data = process_bso_sheets_with_mapping(file_path, bso_sheets, model_mapping)
-
-# Consolidate results into a single DataFrame
 def consolidate_results(predictions_by_bso):
     consolidated_data = []
     for bso, data in predictions_by_bso.items():
         data['BSO'] = bso  # Add a BSO column to identify the source
         consolidated_data.append(data)
-    # Combine all data into a single DataFrame
     consolidated_df = pd.concat(consolidated_data, ignore_index=True)
     return consolidated_df
 
-
-
-# Consolidate all results into a single DataFrame
+# Main section to process all BSO sheets
+updated_bso_data = process_bso_sheets_with_mapping(file_path, bso_sheets, model_mapping)
 consolidated_results = consolidate_results(updated_bso_data)
 
-
+# Display the consolidated results
+print(consolidated_results.head())
