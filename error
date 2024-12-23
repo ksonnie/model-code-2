@@ -14,18 +14,9 @@ bso_sheets = {
    'PACFLT': 'PACFLT Proj'
 }
 
-# The all_results DataFrame is assumed to already exist in the script
-# Example structure for reference:
-# all_results = pd.DataFrame({
-#     'BSO': [...],
-#     'KPI Column': [...],
-#     'Best Model': [...],
-#     'Fit Analysis': [...],
-# })
-
 # Function to replace NA with zeros
 def replace_na_with_zeros(df):
-   return df.fillna(0)
+    return df.fillna(0)
 
 # Function to process each BSO sheet and make predictions
 def process_bso_sheets(file_path, bso_sheets, all_results):
@@ -137,6 +128,5 @@ updated_bso_data = process_bso_sheets(file_path, bso_sheets, all_results)
 # Consolidate all results into a single DataFrame
 consolidated_results = consolidate_results(updated_bso_data)
 
-
-
-
+# Display consolidated results as a table
+print(consolidated_results)
