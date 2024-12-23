@@ -15,5 +15,9 @@ updated_bso_data = process_bso_sheets(file_path, bso_sheets, all_results)
 consolidated_results = consolidate_results(updated_bso_data)
 
 # Display the results in a tabular format
-import ace_tools as tools  # Use ace_tools for a better table view
-tools.display_dataframe_to_user(name="Predicted KPI Results", dataframe=consolidated_results)
+print("Consolidated Results:")
+print(consolidated_results.head(20))  # Show the first 20 rows for preview
+
+# Optionally save to a CSV file for better visualization
+consolidated_results.to_csv("predicted_kpi_results.csv", index=False)
+print("Results saved to predicted_kpi_results.csv")
