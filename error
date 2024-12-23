@@ -1,25 +1,4 @@
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, ElasticNet
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
-
-# File path and relevant BSO sheets
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-bso_sheets = {
-   'USFFC': 'FFC Proj',
-   'RESFOR': 'RESFOR Proj',
-   'PACFLT': 'PACFLT Proj'
-}
-
-# Function to replace NA with zeros
-def replace_na_with_zeros(df):
-    return df.fillna(0)
-
-# Function to process each BSO sheet and make predictions
-def process_bso_sheets(file_path, bso_sheets, all_results):
+def process_bso_sheets_weekly(file_path, bso_sheets, model_mapping):
     predictions_by_bso = {}
     
     for bso, sheet_name in bso_sheets.items():
@@ -38,33 +17,23 @@ def process_bso_sheets(file_path, bso_sheets, all_results):
         last_date = data['Date'].max()
         print(f"Last Date in {sheet_name}: {last_date}")
         
-        future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
-        print(f"Future Dates: {future_dates}")
-        
         for kpi_column in data.columns:
             if kpi_column in ['Date', 'BSO']:
                 continue  # Skip non-KPI columns
             
-            model_row = all_results[
-                (all_results['BSO'] == bso) &
-                (all_results['KPI Column'] == kpi_column) &
-                (all_results['Fit Analysis'] == 'Good Fit')
-            ]
-            
-            if model_row.empty:
+            model_key = (bso, kpi_column)
+            if model_key not in model_mapping:
                 print(f"No valid model found for KPI: {kpi_column} in BSO: {bso}. Skipping.")
                 continue
             
-            best_model_name = model_row.iloc[0]['Best Model']
+            best_model_name = model_mapping[model_key]
             print(f"Using Model: {best_model_name} for KPI: {kpi_column}, BSO: {bso}")
             
+            # Prepare features
             X = data[['Date']].copy()
-            X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-            X['Year'] = X['Date'].dt.year
             X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
             
             y = data[kpi_column].values
-            print(f"Target Values (y) for {kpi_column}, {bso}: {y}")
             
             # Validate `y` values
             if np.any(np.isnan(y)) or np.any(np.isinf(y)) or np.any(y > 1e6):
@@ -87,46 +56,41 @@ def process_bso_sheets(file_path, bso_sheets, all_results):
                 continue
             
             X_train, X_test, y_train, y_test = train_test_split(
-                X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
+                X[['DateNumeric']], y, test_size=0.2, random_state=42)
             
             model.fit(X_train, y_train)
             print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
             
-            # Prepare future features
-            future_features = pd.DataFrame({'Date': future_dates})
-            future_features['WeekOfYear'] = future_features['Date'].dt.isocalendar().week
-            future_features['Year'] = future_features['Date'].dt.year
-            future_features['DateNumeric'] = future_features['Date'].map(pd.Timestamp.toordinal)
-            
-            print(f"Future Features: {future_features}")
-            
-            future_predictions = model.predict(future_features[['DateNumeric', 'WeekOfYear', 'Year']])
-            print(f"Predictions: {future_predictions}")
-            
-            # Add predictions to the data
-            new_rows = pd.DataFrame({'Date': future_dates, kpi_column: future_predictions})
-            data = pd.concat([data, new_rows], ignore_index=True)
+            # Iteratively predict future values
+            for i in range(3):  # Predict for the next 3 weeks
+                future_date = last_date + pd.Timedelta(weeks=i+1)
+                
+                future_features = pd.DataFrame({'Date': [future_date]})
+                future_features['DateNumeric'] = future_features['Date'].map(pd.Timestamp.toordinal)
+                
+                print(f"Future Features: {future_features}")
+                
+                future_prediction = model.predict(future_features[['DateNumeric']])
+                print(f"Prediction for {future_date}: {future_prediction}")
+                
+                # Append prediction to the data
+                new_row = pd.DataFrame({'Date': [future_date], kpi_column: future_prediction[0]})
+                data = pd.concat([data, new_row], ignore_index=True)
+                
+                # Update last_date
+                last_date = future_date
+                
+                # Retrain the model with the updated dataset
+                X = data[['Date']].copy()
+                X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
+                y = data[kpi_column].values
+                model.fit(X[['DateNumeric']], y)
+                print(f"Model retrained successfully after including prediction for {future_date}")
         
         predictions_by_bso[bso] = data
         print(f"Completed processing for BSO: {bso}")
     
     return predictions_by_bso
 
-# Collect results in a consolidated DataFrame
-def consolidate_results(predictions_by_bso):
-    consolidated_data = []
-    for bso, data in predictions_by_bso.items():
-        data['BSO'] = bso  # Add a BSO column to the DataFrame
-        consolidated_data.append(data)
-    # Combine all data into a single DataFrame
-    consolidated_df = pd.concat(consolidated_data, ignore_index=True)
-    return consolidated_df
-
 # Main section to process and display results
-updated_bso_data = process_bso_sheets(file_path, bso_sheets, all_results)
-
-# Consolidate all results into a single DataFrame
-consolidated_results = consolidate_results(updated_bso_data)
-
-# Display consolidated results as a table
-print(consolidated_results)
+updated_bso_data = process_bso_sheets_weekly(file_path, bso_sheets, model_mapping)
