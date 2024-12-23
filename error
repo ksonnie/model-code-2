@@ -1,6 +1,7 @@
 %pip install lightgbm
 %pip install xgboost
 
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -19,7 +20,8 @@ bso_sheets = {
 
 # Model Mapping Dictionary: BSO, KPI Column, and Best Model
 model_mapping = {
-    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor', ('USFFC', 'RBC Level- Total Negative Billed'): 'XGBoost Regressor', ('USFFC', 'RBC Level- Total Negative Authorizations'): 'Gradient Boosting', ('USFFC', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree', ('USFFC', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Gradient Boosting', ('USFFC', 'Permanent Journal Vouchers'): 'Linear Regression', ('USFFC', 'OTA w/ Closed RON'): 'Linear Regression', ('USFFC', 'Negative Liquidations - Other'): 'XGBoost Regressor', ('USFFC', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('USFFC', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor', ('USFFC', 'Cost Transfer Allocation - "COE"'): 'Decision Tree', ('USFFC', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('USFFC', 'Cost Transfer Allocation - "L"'): 'Decision Tree', ('USFFC', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('USFFC', 'Invalid LOA'): 'Linear Regression', ('RESFOR', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('RESFOR', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'Decision Tree', ('RESFOR', 'RBC Level- Total Negative Billed'): 'Linear Regression', ('RESFOR', 'RBC Level- Total Negative Authorizations'): 'Linear Regression', ('RESFOR', 'RON Level- Total Negative Reimbursable Collected'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'XGBoost Regressor', ('RESFOR', 'Permanent Journal Vouchers'): 'Linear Regression', ('RESFOR', 'OTA w/ Closed RON'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Other'): 'Gradient Boosting', ('RESFOR', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Foreign Currency'): 'Linear Regression', ('RESFOR', 'Cost Transfer Allocation - "COE"'): 'Linear Regression', ('RESFOR', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('RESFOR', 'Cost Transfer Allocation - "L"'): 'Linear Regression', ('RESFOR', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('RESFOR', 'Invalid LOA'): 'Linear Regression', ('PACFLT', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('PACFLT', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor', ('PACFLT', 'RBC Level- Total Negative Billed'): 'Decision Tree', ('PACFLT', 'RBC Level- Total Negative Authorizations'): 'Decision Tree', ('PACFLT', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree', ('PACFLT', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Decision Tree', ('PACFLT', 'Permanent Journal Vouchers'): 'Linear Regression', ('PACFLT', 'OTA w/ Closed RON'): 'Linear Regression', ('PACFLT', 'Negative Liquidations - Other'): 'Decision Tree', ('PACFLT', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('PACFLT', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor', ('PACFLT', 'Cost Transfer Allocation - "COE"'): 'Decision Tree', ('PACFLT', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('PACFLT', 'Cost Transfer Allocation - "L"'): 'XGBoost Regressor', ('PACFLT', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('PACFLT', 'Invalid LOA'): 'Linear Regression'
+    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor',
+    # Add other mappings...
 }
 
 # Function to replace NA with zeros
@@ -46,14 +48,10 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
         # Handle invalid dates
         if data['Date'].isnull().any():
-            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
             earliest_date = data['Date'].dropna().min()
             data['Date'].fillna(earliest_date, inplace=True)
 
         last_date = data['Date'].max()
-        print(f"Last Date in {sheet_name}: {last_date}")
-
-        # Prepare future dates
         future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
 
         # Prepare data for modeling
@@ -87,56 +85,44 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             continue
 
         try:
+            # Fit model
             X_train, X_test, y_train, y_test = train_test_split(
                 X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
             model.fit(X_train, y_train)
-            print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
             # Iteratively predict for each future date
             for future_date in future_dates:
-                # Prepare data for the future date
+                # Prepare future data
                 future_feature = pd.DataFrame({'Date': [future_date]})
                 future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
                 future_feature['Year'] = future_feature['Date'].dt.year
                 future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
 
+                # Predict and append to historical data
                 future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
-                print(f"Prediction for {future_date}: {future_prediction}")
-
-                # Add the prediction as part of historical data
                 new_row = {'Date': future_date, kpi_column: future_prediction}
                 data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
 
-                # Update X and y for the next iteration
-                X = data[['Date']].copy()
-                X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-                X['Year'] = X['Date'].dt.year
-                X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
-
-                y = data[kpi_column].values
-
         except Exception as e:
-            print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
+            print(f"Error during prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
             continue
 
-        predictions_by_bso[bso] = data
-        print(f"Completed processing for BSO: {bso}, KPI: {kpi_column}")
+        predictions_by_bso[(bso, kpi_column)] = data[['Date', kpi_column]]
 
     return predictions_by_bso
 
-# Consolidate results into a single DataFrame
+# Consolidate predictions into a table
 def consolidate_results(predictions_by_bso):
-    consolidated_data = []
-    for bso, data in predictions_by_bso.items():
-        data['BSO'] = bso  # Add a BSO column to identify the source
-        consolidated_data.append(data)
-    # Combine all data into a single DataFrame
-    consolidated_df = pd.concat(consolidated_data, ignore_index=True)
-    return consolidated_df
+    all_predictions = []
+    for (bso, kpi_column), df in predictions_by_bso.items():
+        df['BSO'] = bso
+        df['KPI Column'] = kpi_column
+        all_predictions.append(df)
+    return pd.concat(all_predictions, ignore_index=True)
 
-
-# Main section to process all BSO sheets and consolidate the results
+# Main execution
 updated_bso_data = process_bso_sheets(file_path, bso_sheets, model_mapping)
-
-# Consolidate all results into a single DataFrame
 consolidated_results = consolidate_results(updated_bso_data)
+
+# Display the results
+print(consolidated_results.head())
