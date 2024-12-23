@@ -1,40 +1,16 @@
-%pip install lightgbm
-%pip install xgboost
-
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, ElasticNet
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
-
-# File path and relevant BSO sheets
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-bso_sheets = {
-    'USFFC': 'FFC Proj',
-    'RESFOR': 'RESFOR Proj',
-    'PACFLT': 'PACFLT Proj'
-}
-
-# Model Mapping Dictionary: BSO, KPI Column, and Best Model
-model_mapping = {
-    ('USFFC', 'KPI1'): 'XGBoost Regressor',
-    ('RESFOR', 'KPI2'): 'Linear Regression',
-    ('PACFLT', 'KPI3'): 'Gradient Boosting'
-    # Add more mappings here
-}
-
-# Function to replace NA with zeros
-def replace_na_with_zeros(df):
-    return df.fillna(0)
-
 # Function to process BSO sheets and make predictions
 def process_bso_sheets(file_path, bso_sheets, model_mapping):
     consolidated_data = []
 
-    for bso, sheet_name in bso_sheets.items():
-        print(f"Processing BSO: {bso}, Sheet: {sheet_name}")
+    for (bso, kpi_column), best_model_name in model_mapping.items():
+        print(f"Processing BSO: {bso}, KPI: {kpi_column}, Model: {best_model_name}")
+
+        # Identify the corresponding sheet for this BSO
+        if bso not in bso_sheets:
+            print(f"BSO {bso} not found in bso_sheets. Skipping.")
+            continue
+
+        sheet_name = bso_sheets[bso]
 
         # Read the relevant sheet
         data = pd.read_excel(file_path, sheet_name=sheet_name)
@@ -46,72 +22,71 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             earliest_date = data['Date'].dropna().min()
             data['Date'].fillna(earliest_date, inplace=True)
 
-        # Add a BSO column
-        data['BSO'] = bso
-
         last_date = data['Date'].max()
         future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
 
-        for kpi_column in data.columns:
-            if kpi_column in ['Date', 'BSO']:
-                continue  # Skip non-KPI columns
+        # Prepare data for modeling
+        if kpi_column not in data.columns:
+            print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
+            continue
 
-            # Match the KPI column with model_mapping
-            if (bso, kpi_column) not in model_mapping:
-                print(f"No model mapping found for BSO: {bso}, KPI: {kpi_column}. Skipping.")
-                continue
+        X = data[['Date']].copy()
+        X['WeekOfYear'] = X['Date'].dt.isocalendar().week
+        X['Year'] = X['Date'].dt.year
+        X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
 
-            best_model_name = model_mapping[(bso, kpi_column)]
+        y = data[kpi_column].values
+        if np.any(np.isnan(y)) or np.any(np.isinf(y)):
+            print(f"Invalid values in KPI column {kpi_column} for BSO {bso}. Skipping...")
+            continue
 
-            # Prepare data for modeling
-            X = data[['Date']].copy()
-            X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-            X['Year'] = X['Date'].dt.year
-            X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
+        # Train the model
+        if best_model_name == 'XGBoost Regressor':
+            model = XGBRegressor(random_state=42)
+        elif best_model_name == 'Gradient Boosting':
+            model = GradientBoostingRegressor(random_state=42)
+        elif best_model_name == 'Decision Tree':
+            model = DecisionTreeRegressor(random_state=42)
+        elif best_model_name == 'Linear Regression':
+            model = LinearRegression()
+        elif best_model_name == 'ElasticNet(alpha=0.1)':
+            model = ElasticNet(alpha=0.1, random_state=42)
+        else:
+            print(f"Unknown Model: {best_model_name} for KPI: {kpi_column}. Skipping.")
+            continue
 
-            y = data[kpi_column].values
-            if np.any(np.isnan(y)) or np.any(np.isinf(y)):
-                print(f"Invalid values in KPI column {kpi_column} for BSO {bso}. Skipping...")
-                continue
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
+            model.fit(X_train, y_train)
+            print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
-            # Train the model
-            if best_model_name == 'XGBoost Regressor':
-                model = XGBRegressor(random_state=42)
-            elif best_model_name == 'Gradient Boosting':
-                model = GradientBoostingRegressor(random_state=42)
-            elif best_model_name == 'Decision Tree':
-                model = DecisionTreeRegressor(random_state=42)
-            elif best_model_name == 'Linear Regression':
-                model = LinearRegression()
-            elif best_model_name == 'ElasticNet(alpha=0.1)':
-                model = ElasticNet(alpha=0.1, random_state=42)
-            else:
-                print(f"Unknown Model: {best_model_name} for KPI: {kpi_column}. Skipping.")
-                continue
+            # Iteratively predict for each future date
+            for future_date in future_dates:
+                # Prepare data for the future date
+                future_feature = pd.DataFrame({'Date': [future_date]})
+                future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
+                future_feature['Year'] = future_feature['Date'].dt.year
+                future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
 
-            try:
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
-                model.fit(X_train, y_train)
-                print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
+                future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
+                print(f"Prediction for {future_date}: {future_prediction}")
 
-                # Iteratively predict for each future date
-                for future_date in future_dates:
-                    future_feature = pd.DataFrame({'Date': [future_date]})
-                    future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
-                    future_feature['Year'] = future_feature['Date'].dt.year
-                    future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
+                # Add the prediction as part of historical data
+                new_row = {'Date': future_date, kpi_column: future_prediction}
+                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
 
-                    future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
-                    print(f"Prediction for {future_date}: {future_prediction}")
+                # Update X and y for the next iteration
+                X = data[['Date']].copy()
+                X['WeekOfYear'] = X['Date'].dt.isocalendar().week
+                X['Year'] = X['Date'].dt.year
+                X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
 
-                    # Add the prediction as part of historical data
-                    new_row = {'Date': future_date, kpi_column: future_prediction}
-                    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+                y = data[kpi_column].values
 
-            except Exception as e:
-                print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
-                continue
+        except Exception as e:
+            print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
+            continue
 
         consolidated_data.append(data)
 
@@ -121,6 +96,3 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
 # Process all BSO sheets and consolidate the results
 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-
-# Display the consolidated results
-print(consolidated_results.head())
