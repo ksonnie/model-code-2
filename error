@@ -62,11 +62,9 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
             # Iteratively predict for each future date
-            future_dates = []
             for _ in range(3):  # Predict for the next 3 weeks
                 # Calculate next future date
                 next_date = last_date + pd.Timedelta(days=7)
-                future_dates.append(next_date)
 
                 # Prepare data for the future date
                 future_feature = pd.DataFrame({'Date': [next_date]})
@@ -84,14 +82,6 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
                 # Update last_date for the next iteration
                 last_date = next_date
 
-                # Update X and y for the next iteration
-                X = data[['Date']].copy()
-                X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-                X['Year'] = X['Date'].dt.year
-                X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
-
-                y = data[kpi_column].values
-
         except Exception as e:
             print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
             continue
@@ -105,5 +95,3 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 # Process all BSO sheets and consolidate the results
 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
 
-# Display the consolidated results
-print(consolidated_results.head())
