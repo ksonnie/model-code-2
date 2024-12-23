@@ -1,5 +1,29 @@
-ValueError: mixed datetimes and integers in passed array
-File <command-457968384398236>, line 146
-    144 bso_name = 'USFFC'
-    145 sheet_name = 'FFC Proj'
---> 146 final_data_with_predictions = process_bso(sheet_name, bso_name)
+def load_data(sheet_name):
+    data = pd.read_excel(
+        "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx",
+        sheet_name=sheet_name
+    )
+    # Replace NaNs with 0
+    data.fillna(0, inplace=True)
+    
+    # Ensure the 'Date' column is in datetime format
+    if 'Date' in data.columns:
+        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')  # Convert invalid dates to NaT
+        if data['Date'].isnull().any():
+            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
+            earliest_date = data['Date'].dropna().min()  # Find the earliest valid date
+            data['Date'].fillna(earliest_date, inplace=True)  # Replace NaT with earliest valid date
+    
+    return data
+
+
+
+
+# Prepare data for modeling
+if kpi_column not in data.columns:
+    print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
+    continue
+
+# Ensure the 'Date' column is properly formatted
+if not pd.api.types.is_datetime64_any_dtype(data['Date']):
+    raise ValueError(f"Date column in sheet {sheet_name} is not properly formatted as datetime.")
