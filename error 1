@@ -87,7 +87,7 @@ def process_kpi_columns(data, kpi_columns):
 
     # Combine original data with the predictions
     final_data = pd.concat([data, predictions], ignore_index=True)
-    final_data['Date'] = pd.to_datetime(final_data['Date'])
+    final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
     return final_data
 
 # Main execution
