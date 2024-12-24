@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
 # File path and sheet information
@@ -18,7 +17,7 @@ kpi_columns = [
     "RBC Level- Total Negative Authorizations",
 ]
 
-# Function to preprocess and predict KPI values
+# Function to preprocess and predict KPI values using dynamic historical data
 def process_and_predict(sheet_name, kpi_columns):
     # Load the data
     data = pd.read_excel(file_path, sheet_name=sheet_name)
@@ -28,13 +27,11 @@ def process_and_predict(sheet_name, kpi_columns):
     # Convert Date to numeric format
     data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
 
-    # Prepare future dates for predictions (next 3 weeks)
-    last_date = data['Date'].max()
-    future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
-    future_date_numeric = [pd.Timestamp(date).toordinal() for date in future_dates]
+    # Initialize the MinMaxScaler
+    scaler = MinMaxScaler()
 
     # DataFrame to hold predictions
-    future_predictions = {'Date': future_dates}
+    predictions_list = []
 
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
@@ -44,31 +41,47 @@ def process_and_predict(sheet_name, kpi_columns):
             X = data[['DateNumeric']]
             y = data[kpi_column]
 
-            # Handle missing or zero-filled KPIs
-            if y.isnull().sum() > 0 or y.sum() == 0:
-                print(f"Skipping {kpi_column} due to missing or zero data.")
+            # Validate the target data
+            if y.isnull().sum() > 0 or y.nunique() <= 1:
+                print(f"Skipping {kpi_column}: insufficient or constant data.")
                 continue
 
             # Scale the input data
-            scaler = MinMaxScaler()
             X_scaled = scaler.fit_transform(X)
 
-            # Train-test split
-            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
-
-            # Initialize and train model
+            # Initialize the model
             model = RandomForestRegressor(random_state=42)
-            model.fit(X_train, y_train)
 
-            # Predict future KPI values
-            future_X_scaled = scaler.transform(np.array(future_date_numeric).reshape(-1, 1))
-            future_kpi_predictions = model.predict(future_X_scaled)
+            # Train the model on historical data
+            model.fit(X_scaled, y)
 
-            # Store predictions
-            future_predictions[kpi_column] = future_kpi_predictions
+            # Predict the next 3 weeks dynamically updating historical data
+            last_date = data['Date'].max()
+            for i in range(3):
+                # Calculate the next prediction date
+                next_date = last_date + pd.Timedelta(days=7)
 
-    # Convert predictions to DataFrame
-    predictions_df = pd.DataFrame(future_predictions)
+                # Prepare the next date for prediction
+                next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+                next_prediction = model.predict([[next_date_numeric]])[0]
+
+                # Append the prediction to the historical data
+                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+
+                # Store the prediction
+                predictions_list.append({'Date': next_date, 'KPI': kpi_column, 'Prediction': next_prediction})
+
+                # Update historical data for the next iteration
+                X_scaled = np.append(X_scaled, [[next_date_numeric]], axis=0)
+                y = np.append(y, next_prediction)
+                model.fit(X_scaled, y)  # Retrain the model with updated data
+
+                # Update the last date
+                last_date = next_date
+
+    # Convert predictions to a DataFrame
+    predictions_df = pd.DataFrame(predictions_list)
     return predictions_df
 
 # Process each sheet and generate predictions
