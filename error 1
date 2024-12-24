@@ -43,8 +43,7 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
         # Read the relevant sheet
         data = pd.read_excel(file_path, sheet_name=sheet_name)
-        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')  # Ensure date column is in Timestamp format
-        data = replace_na_with_zeros(data)
+        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
 
         # Handle invalid dates
         if data['Date'].isnull().any():
@@ -52,7 +51,7 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             earliest_date = data['Date'].dropna().min()
             data['Date'].fillna(earliest_date, inplace=True)
 
-        last_date = pd.to_datetime(data['Date']).max()  # Ensure `last_date` is a Timestamp
+        last_date = data['Date'].max()
         print(f"Last Date in {sheet_name}: {last_date}")
 
         # Prepare data for modeling
@@ -60,12 +59,12 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
             continue
 
-        X = data[['Date']].copy()
-        X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-        X['Year'] = X['Date'].dt.year
-        X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
+        # Ensure 'DateNumeric' is consistent
+        data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
 
+        X = data[['DateNumeric']]
         y = data[kpi_column].values
+
         if np.any(np.isnan(y)) or np.any(np.isinf(y)):
             print(f"Invalid values in KPI column {kpi_column} for BSO {bso}. Skipping...")
             continue
@@ -86,28 +85,22 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             continue
 
         try:
-            X_train, X_test, y_train, y_test = train_test_split(
-                X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
+            # Split the data for training
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
             model.fit(X_train, y_train)
             print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
             # Iteratively predict for each future date
-            future_predictions = []
             for _ in range(3):  # Predict for the next 3 weeks
-                # Calculate next future date
-                next_date = last_date + pd.Timedelta(days=7)  # Add 7 days to the last date
+                next_date = last_date + pd.Timedelta(days=7)
 
                 # Prepare data for the future date
-                future_feature = pd.DataFrame({'Date': [next_date]})
-                future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
-                future_feature['Year'] = future_feature['Date'].dt.year
-                future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
-
-                future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
-                print(f"Prediction for {next_date}: {future_prediction}")
+                next_date_numeric = next_date.toordinal()
+                prediction = model.predict([[next_date_numeric]])[0]
+                print(f"Prediction for {next_date}: {prediction}")
 
                 # Add the prediction as part of historical data
-                new_row = {'Date': next_date, kpi_column: future_prediction}
+                new_row = {'Date': next_date, 'DateNumeric': next_date_numeric, kpi_column: prediction}
                 data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
 
                 # Update last_date for the next iteration
