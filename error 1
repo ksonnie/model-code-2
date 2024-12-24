@@ -1,122 +1,78 @@
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import PowerTransformer
 import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 
-# Define KPI columns for each model
-model_kpi_mapping = {
-    'RandomForestRegressor': [
-        'NULOs that Remain High Priority',
-        'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'
-    ],
-    'GradientBoostingRegressor': [
-        'RBC Level- Total Negative Authorizations',
-        'Negative Liquidations - Travel (DTC: CS, CT, TO)'
-    ],
-    'DecisionTreeRegressor': [
-        'RBC Level- Total Negative Billed',
-        'Cost Transfer Allocation - "COE"'
-    ],
-    'LinearRegression': [
-        'Permanent Journal Vouchers',
-        'Invalid LOA'
-    ]
+# File path and sheet information
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+bso_sheets = {
+    'USFFC': 'FFC Proj'
 }
 
-# Load data
-def load_data(sheet_name, bso_name):
-    print(f"Loading data for sheet: {sheet_name}, BSO: {bso_name}")
-    data = pd.read_excel("/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx", sheet_name=sheet_name)
-    data['BSO'] = bso_name  # Add the BSO column
-    data['Date'] = pd.to_datetime(data['Date'])  # Convert Date column to datetime
-    return data
+# Define KPI columns to process
+kpi_columns = [
+    "NULOs that Remain High Priority",
+    "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
+    "RBC Level- Total Negative Billed",
+    "RBC Level- Total Negative Authorizations",
+]
 
-# Generate predictions
-def generate_predictions(data, kpi_columns, model):
-    predictions = []
-    data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)  # Convert Date to numeric
+# Function to preprocess and predict KPI values
+def process_and_predict(sheet_name, kpi_columns):
+    # Load the data
+    data = pd.read_excel(file_path, sheet_name=sheet_name)
+    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+    data = data.dropna(subset=['Date'])  # Drop rows with invalid dates
+
+    # Convert Date to numeric format
+    data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
+
+    # Prepare future dates for predictions (next 3 weeks)
+    last_date = data['Date'].max()
+    future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
+    future_date_numeric = [pd.Timestamp(date).toordinal() for date in future_dates]
+
+    # DataFrame to hold predictions
+    future_predictions = {'Date': future_dates}
 
     for kpi_column in kpi_columns:
-        if kpi_column not in data.columns:
-            print(f"KPI column {kpi_column} not found. Skipping...")
-            continue
+        if kpi_column in data.columns:
+            print(f"Processing KPI: {kpi_column}")
 
-        X = data[['DateNumeric']]
-        y = data[kpi_column].values
+            # Prepare data for model training
+            X = data[['DateNumeric']]
+            y = data[kpi_column]
 
-        if len(X) == 0 or len(y) == 0:
-            print(f"No data available for KPI column {kpi_column}. Skipping...")
-            continue
+            # Handle missing or zero-filled KPIs
+            if y.isnull().sum() > 0 or y.sum() == 0:
+                print(f"Skipping {kpi_column} due to missing or zero data.")
+                continue
 
-        # Apply transformation
-        transformer = PowerTransformer()
-        try:
-            y_transformed = transformer.fit_transform(y.reshape(-1, 1)).flatten()
-        except Exception as e:
-            print(f"Error transforming KPI {kpi_column}: {e}. Skipping...")
-            continue
+            # Scale the input data
+            scaler = MinMaxScaler()
+            X_scaled = scaler.fit_transform(X)
 
-        # Train-test split
-        X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=0.2, random_state=42)
+            # Train-test split
+            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-        if len(X_train) == 0 or len(y_train) == 0:
-            print(f"Empty training data for KPI column {kpi_column}. Skipping...")
-            continue
-
-        # Fit the model
-        try:
+            # Initialize and train model
+            model = RandomForestRegressor(random_state=42)
             model.fit(X_train, y_train)
-            print(f"Model trained successfully for KPI: {kpi_column}")
-        except Exception as e:
-            print(f"Error training model for KPI {kpi_column}: {e}. Skipping...")
-            continue
 
-        # Generate future dates
-        last_date = data['Date'].max()
-        future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
-        future_numeric = pd.DataFrame({'DateNumeric': [d.toordinal() for d in future_dates]})
+            # Predict future KPI values
+            future_X_scaled = scaler.transform(np.array(future_date_numeric).reshape(-1, 1))
+            future_kpi_predictions = model.predict(future_X_scaled)
 
-        # Make predictions
-        try:
-            future_preds = model.predict(future_numeric)
-            future_preds_original = transformer.inverse_transform(future_preds.reshape(-1, 1)).flatten()
+            # Store predictions
+            future_predictions[kpi_column] = future_kpi_predictions
 
-            for date, pred in zip(future_dates, future_preds_original):
-                predictions.append({'Date': date, 'KPI': kpi_column, 'Prediction': pred, 'BSO': data['BSO'].iloc[0]})
+    # Convert predictions to DataFrame
+    predictions_df = pd.DataFrame(future_predictions)
+    return predictions_df
 
-        except Exception as e:
-            print(f"Error making predictions for KPI {kpi_column}: {e}")
-
-    return predictions
-
-# Run model predictions
-def run_model_predictions(sheet_name, bso_name, model_name, kpi_columns):
-    print(f"Running predictions for model: {model_name}, sheet: {sheet_name}, BSO: {bso_name}")
-    data = load_data(sheet_name, bso_name)
-    model_map = {
-        'RandomForestRegressor': RandomForestRegressor(random_state=42),
-        'GradientBoostingRegressor': GradientBoostingRegressor(random_state=42),
-        'DecisionTreeRegressor': DecisionTreeRegressor(random_state=42),
-        'LinearRegression': LinearRegression()
-    }
-    model = model_map.get(model_name)
-    if not model:
-        print(f"Model {model_name} not found.")
-        return pd.DataFrame()
-
-    return pd.DataFrame(generate_predictions(data, kpi_columns, model))
-
-# Process each BSO and model
-ffc_data_random_forest = run_model_predictions("FFC Proj", "USFFC", "RandomForestRegressor", model_kpi_mapping["RandomForestRegressor"])
-ffc_data_gradient_boosting = run_model_predictions("FFC Proj", "USFFC", "GradientBoostingRegressor", model_kpi_mapping["GradientBoostingRegressor"])
-ffc_data_decision_tree = run_model_predictions("FFC Proj", "USFFC", "DecisionTreeRegressor", model_kpi_mapping["DecisionTreeRegressor"])
-ffc_data_linear_regression = run_model_predictions("FFC Proj", "USFFC", "LinearRegression", model_kpi_mapping["LinearRegression"])
-
-# Combine results for all models
-all_predictions = pd.concat([ffc_data_random_forest, ffc_data_gradient_boosting, ffc_data_decision_tree, ffc_data_linear_regression], ignore_index=True)
-
-# Show the final DataFrame
-print(all_predictions)
+# Process each sheet and generate predictions
+for bso, sheet_name in bso_sheets.items():
+    print(f"Processing BSO: {bso}")
+    predictions = process_and_predict(sheet_name, kpi_columns)
+    print(predictions)
