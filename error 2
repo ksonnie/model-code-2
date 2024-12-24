@@ -1,7 +1,13 @@
-ValueError: mixed datetimes and integers in passed array
-File <command-1730256386727003>, line 127
-    124     return consolidated_df
-    126 # Process all BSO sheets and consolidate the results
---> 127 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-    129 # Display consolidated results
-    130 print(consolidated_results)
+ValueError: No objects to concatenate
+File <command-1730256386727003>, line 120
+    117     return consolidated_df
+    119 # Process all BSO sheets and consolidate the results
+--> 120 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
+    122 # Display consolidated results
+    123 print(consolidated_results)
+File /databricks/python/lib/python3.10/site-packages/pandas/core/reshape/concat.py:425, in _Concatenator.__init__(self, objs, axis, join, keys, levels, names, ignore_index, verify_integrity, copy, sort)
+    422     objs = list(objs)
+    424 if len(objs) == 0:
+--> 425     raise ValueError("No objects to concatenate")
+    427 if keys is None:
+    428     objs = list(com.not_none(*objs))
