@@ -23,9 +23,14 @@ def load_data(file_path, sheet_name):
     data.dropna(subset=['Date'], inplace=True)  # Drop rows with invalid dates
     return data
 
-# Function to process each KPI column and append predictions
+# Function to process all KPI columns and add predictions for each date
 def process_kpi_columns(data, kpi_columns):
     scaler = MinMaxScaler()
+    last_date = data['Date'].max()  # Get the latest date in the data
+
+    # Prepare a DataFrame to hold future predictions
+    future_dates = [last_date + pd.Timedelta(days=7 * i) for i in range(1, 4)]
+    predictions = pd.DataFrame({'Date': future_dates})
 
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
@@ -52,24 +57,20 @@ def process_kpi_columns(data, kpi_columns):
             model = RandomForestRegressor(random_state=42)
             model.fit(X_scaled, y)
 
-            # Predict for the next 3 weeks
-            last_date = kpi_data['Date'].max()
-            predictions = []
+            # Generate predictions for the next 3 weeks
+            future_predictions = []
+            current_last_date = last_date
 
             for i in range(3):
-                # Calculate the next date for prediction
-                next_date = last_date + pd.Timedelta(days=7)
-
                 # Prepare input for prediction
-                next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+                next_date_numeric = scaler.transform([[current_last_date.toordinal()]])[0][0]
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
                 # Append prediction
-                predictions.append({'Date': next_date, kpi_column: next_prediction})
+                future_predictions.append(next_prediction)
 
                 # Update historical data with the predicted value
-                last_date = next_date
-                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                new_row = {'Date': current_last_date, 'DateNumeric': current_last_date.toordinal(), kpi_column: next_prediction}
                 kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
 
                 # Retrain the model with updated data
@@ -78,14 +79,16 @@ def process_kpi_columns(data, kpi_columns):
                 X_scaled = scaler.fit_transform(X)
                 model.fit(X_scaled, y)
 
-            # Convert predictions to a DataFrame and append to the original data
-            prediction_df = pd.DataFrame(predictions)
-            data = pd.concat([data, prediction_df], ignore_index=True)
+                # Update the date for the next iteration
+                current_last_date += pd.Timedelta(days=7)
 
-    # Sort the data by Date and reset the index
-    data.sort_values(by='Date', inplace=True)
-    data.reset_index(drop=True, inplace=True)
-    return data
+            # Add predictions to the future dates DataFrame
+            predictions[kpi_column] = future_predictions
+
+    # Combine original data with the predictions
+    final_data = pd.concat([data, predictions], ignore_index=True)
+    final_data['Date'] = pd.to_datetime(final_data['Date'])
+    return final_data
 
 # Main execution
 data = load_data(file_path, sheet_name)
