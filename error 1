@@ -1,83 +1,79 @@
-def process_and_predict_with_history(sheet_name, kpi_columns):
+def process_and_predict_all_kpis(sheet_name, kpi_columns):
     # Load the data
     data = pd.read_excel(file_path, sheet_name=sheet_name)
     data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
     data = data.dropna(subset=['Date'])  # Drop rows with invalid dates
 
-    # Convert Date to numeric format
-    data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
+    # Prepare the result DataFrame
+    result_data = data.copy()
+    result_data['DateNumeric'] = result_data['Date'].map(pd.Timestamp.toordinal)
 
     # Initialize the MinMaxScaler
     scaler = MinMaxScaler()
-
-    # DataFrame to hold results
-    result_data = data.copy()
 
     # Iterate through each KPI column
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
             print(f"Processing KPI: {kpi_column}")
 
-            # Prepare data for model training
-            X = data[['DateNumeric']]
-            y = data[kpi_column]
+            # Create a copy of the data for this column's processing
+            column_data = result_data[['Date', 'DateNumeric', kpi_column]].copy()
+            column_data.dropna(subset=[kpi_column], inplace=True)  # Remove rows where KPI is NaN
 
-            # Validate the target data
-            if y.isnull().sum() > 0 or y.nunique() <= 1:
+            # Skip if insufficient data
+            if column_data[kpi_column].nunique() <= 1:
                 print(f"Skipping {kpi_column}: insufficient or constant data.")
                 continue
+
+            # Prepare data for model training
+            X = column_data[['DateNumeric']]
+            y = column_data[kpi_column]
 
             # Scale the input data
             X_scaled = scaler.fit_transform(X)
 
-            # Initialize the model
+            # Initialize the RandomForestRegressor model
             model = RandomForestRegressor(random_state=42)
 
             try:
                 # Train the model on historical data
                 model.fit(X_scaled, y)
 
-                # Predict the next 3 weeks dynamically updating historical data
-                last_date = data['Date'].max()
+                # Start predicting for the next 3 weeks
+                last_date = column_data['Date'].max()
                 future_predictions = []
 
-                for i in range(3):
-                    # Calculate the next prediction date
+                for i in range(3):  # Predict for 3 future weeks
+                    # Calculate next date for prediction
                     next_date = last_date + pd.Timedelta(days=7)
 
-                    # Prepare the next date for prediction
+                    # Prepare the input for prediction
                     next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
                     next_prediction = model.predict([[next_date_numeric]])[0]
 
-                    # Append the prediction to the list
-                    future_predictions.append({
-                        'Date': next_date,
-                        kpi_column: next_prediction
-                    })
+                    # Append the prediction
+                    future_predictions.append({'Date': next_date, kpi_column: next_prediction})
 
-                    # Update the last date
+                    # Update the historical data with the prediction
                     last_date = next_date
-
-                    # Add the prediction to historical data for the next prediction
                     new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
-                    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+                    column_data = pd.concat([column_data, pd.DataFrame([new_row])], ignore_index=True)
 
-                    # Update training data with the new prediction
-                    X = data[['DateNumeric']]
-                    y = data[kpi_column]
+                    # Retrain the model with updated data
+                    X = column_data[['DateNumeric']]
+                    y = column_data[kpi_column]
                     X_scaled = scaler.fit_transform(X)
                     model.fit(X_scaled, y)
 
-                # Append the future predictions to the result_data
+                # Append the future predictions to the result DataFrame
                 future_df = pd.DataFrame(future_predictions)
                 result_data = pd.concat([result_data, future_df[['Date', kpi_column]]], ignore_index=True)
 
             except Exception as e:
-                print(f"Error during model training for {kpi_column}: {e}")
+                print(f"Error processing {kpi_column}: {e}")
 
-    # Sort the final DataFrame by date
+    # Finalize the result
     result_data = result_data.sort_values(by='Date').reset_index(drop=True)
+    result_data.drop(columns=['DateNumeric'], errors='ignore', inplace=True)
 
-    # Drop the DateNumeric column before returning the result
-    result_data = result_data.drop(columns=['DateNumeric'], errors='ignore')
     return result_data
