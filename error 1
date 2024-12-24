@@ -91,9 +91,10 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
             # Iteratively predict for the next 3 weeks
-            for _ in range(3):  # Predict for the next 3 weeks
+            future_predictions = []
+            for i in range(3):  # Predict for the next 3 weeks
                 # Calculate next future date
-                next_date_numeric = last_date_numeric + 7
+                next_date_numeric = last_date_numeric + (i + 1) * 7
 
                 # Prepare data for the future date
                 future_feature = pd.DataFrame({'DateNumeric': [next_date_numeric]})
@@ -104,9 +105,6 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
                 # Add the prediction as part of historical data
                 new_row = {'DateNumeric': next_date_numeric, kpi_column: future_prediction}
                 data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-
-                # Update last_date_numeric for the next iteration
-                last_date_numeric = next_date_numeric
 
             consolidated_data.append(data)
 
