@@ -1,6 +1,7 @@
 %pip install lightgbm
 %pip install xgboost
 
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -13,14 +14,13 @@ from xgboost import XGBRegressor
 file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
 bso_sheets = {
     'USFFC': 'FFC Proj'
+#    'RESFOR': 'RESFOR Proj',
+#    'PACFLT': 'PACFLT Proj'
 }
 
 # Model Mapping Dictionary: BSO, KPI Column, and Best Model
 model_mapping = {
-    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor',
-    ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor',
-    ('USFFC', 'RBC Level- Total Negative Billed'): 'XGBoost Regressor',
-    ('USFFC', 'RBC Level- Total Negative Authorizations'): 'Gradient Boosting'
+    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor', ('USFFC', 'RBC Level- Total Negative Billed'): 'XGBoost Regressor', ('USFFC', 'RBC Level- Total Negative Authorizations'): 'Gradient Boosting', ('USFFC', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree', ('USFFC', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Gradient Boosting', ('USFFC', 'Permanent Journal Vouchers'): 'Linear Regression', ('USFFC', 'OTA w/ Closed RON'): 'Linear Regression', ('USFFC', 'Negative Liquidations - Other'): 'XGBoost Regressor', ('USFFC', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('USFFC', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor', ('USFFC', 'Cost Transfer Allocation - "COE"'): 'Decision Tree', ('USFFC', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('USFFC', 'Cost Transfer Allocation - "L"'): 'Decision Tree', ('USFFC', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('USFFC', 'Invalid LOA'): 'Linear Regression', ('RESFOR', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('RESFOR', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'Decision Tree', ('RESFOR', 'RBC Level- Total Negative Billed'): 'Linear Regression', ('RESFOR', 'RBC Level- Total Negative Authorizations'): 'Linear Regression', ('RESFOR', 'RON Level- Total Negative Reimbursable Collected'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'XGBoost Regressor', ('RESFOR', 'Permanent Journal Vouchers'): 'Linear Regression', ('RESFOR', 'OTA w/ Closed RON'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Other'): 'Gradient Boosting', ('RESFOR', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('RESFOR', 'Negative Liquidations - Foreign Currency'): 'Linear Regression', ('RESFOR', 'Cost Transfer Allocation - "COE"'): 'Linear Regression', ('RESFOR', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('RESFOR', 'Cost Transfer Allocation - "L"'): 'Linear Regression', ('RESFOR', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('RESFOR', 'Invalid LOA'): 'Linear Regression', ('PACFLT', 'NULOs that Remain High Priority'): 'XGBoost Regressor', ('PACFLT', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor', ('PACFLT', 'RBC Level- Total Negative Billed'): 'Decision Tree', ('PACFLT', 'RBC Level- Total Negative Authorizations'): 'Decision Tree', ('PACFLT', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree', ('PACFLT', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Decision Tree', ('PACFLT', 'Permanent Journal Vouchers'): 'Linear Regression', ('PACFLT', 'OTA w/ Closed RON'): 'Linear Regression', ('PACFLT', 'Negative Liquidations - Other'): 'Decision Tree', ('PACFLT', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression', ('PACFLT', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor', ('PACFLT', 'Cost Transfer Allocation - "COE"'): 'Decision Tree', ('PACFLT', 'ZMIL Negative Quantity / Positive Liquidation Amounts'): 'XGBoost Regressor', ('PACFLT', 'Cost Transfer Allocation - "L"'): 'XGBoost Regressor', ('PACFLT', 'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN'): 'Linear Regression', ('PACFLT', 'Invalid LOA'): 'Linear Regression'
 }
 
 # Function to replace NA with zeros
@@ -44,7 +44,6 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
         # Read the relevant sheet
         data = pd.read_excel(file_path, sheet_name=sheet_name)
         data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-        data = replace_na_with_zeros(data)
 
         # Handle invalid dates
         if data['Date'].isnull().any():
@@ -92,36 +91,34 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
             # Iteratively predict for each future date
-            future_predictions = []
-            for i in range(3):  # Predict for the next 3 weeks
+            for _ in range(3):  # Predict for the next 3 weeks
+                # Calculate next future date
                 next_date = last_date + pd.Timedelta(days=7)
+
+                # Prepare data for the future date
                 future_feature = pd.DataFrame({'Date': [next_date]})
                 future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
                 future_feature['Year'] = future_feature['Date'].dt.year
                 future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
 
-                prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
-                print(f"Prediction for {next_date}: {prediction}")
-                future_predictions.append({'Date': next_date, kpi_column: prediction})
-                
-                # Update data for cumulative prediction
-                new_row = {'Date': next_date, kpi_column: prediction}
-                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-                last_date = next_date
+                future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
+                print(f"Prediction for {next_date}: {future_prediction}")
 
-            # Store predictions in consolidated data
-            consolidated_data.append(data)
+                # Add the prediction as part of historical data
+                new_row = {'Date': next_date, kpi_column: future_prediction}
+                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+
+                # Update last_date for the next iteration
+                last_date = next_date
 
         except Exception as e:
             print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
             continue
 
+        consolidated_data.append(data)
+
     # Combine all data into a single DataFrame
     consolidated_df = pd.concat(consolidated_data, ignore_index=True)
     return consolidated_df
-
 # Process all BSO sheets and consolidate the results
 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-
-# Display consolidated results
-print(consolidated_results)
