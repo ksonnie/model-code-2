@@ -21,13 +21,6 @@ model_mapping = {
     ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor',
     ('USFFC', 'RBC Level- Total Negative Billed'): 'XGBoost Regressor',
     ('USFFC', 'RBC Level- Total Negative Authorizations'): 'Gradient Boosting',
-    ('USFFC', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree',
-    ('USFFC', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Gradient Boosting',
-    ('USFFC', 'Permanent Journal Vouchers'): 'Linear Regression',
-    ('USFFC', 'OTA w/ Closed RON'): 'Linear Regression',
-    ('USFFC', 'Negative Liquidations - Other'): 'XGBoost Regressor',
-    ('USFFC', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression',
-    ('USFFC', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor'
 }
 
 # Function to replace NA with zeros
@@ -101,16 +94,23 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
             # Iteratively predict for each future date
             for _ in range(3):  # Predict for the next 3 weeks
+                # Calculate next future date
                 next_date = last_date + pd.Timedelta(days=7)
+
+                # Prepare data for the future date
                 future_feature = pd.DataFrame({'Date': [next_date]})
                 future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
                 future_feature['Year'] = future_feature['Date'].dt.year
                 future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
 
-                prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
-                print(f"Prediction for {next_date}: {prediction}")
-                new_row = {'Date': next_date, kpi_column: prediction}
+                future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
+                print(f"Prediction for {next_date}: {future_prediction}")
+
+                # Add the prediction as part of historical data
+                new_row = {'Date': next_date, kpi_column: future_prediction}
                 data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+
+                # Update last_date for the next iteration
                 last_date = next_date
 
         except Exception as e:
