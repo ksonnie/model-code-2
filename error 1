@@ -1,12 +1,8 @@
-%pip install lightgbm
-%pip install xgboost
-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, ElasticNet
+from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.tree import DecisionTreeRegressor
 from xgboost import XGBRegressor
 
 # File path and relevant BSO sheets
@@ -43,16 +39,19 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
         # Read the relevant sheet
         data = pd.read_excel(file_path, sheet_name=sheet_name)
-        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
         data = replace_na_with_zeros(data)
 
-        # Validate the Date column
-        if data['Date'].isnull().any():
-            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
-            earliest_date = data['Date'].dropna().min()
-            data['Date'].fillna(earliest_date, inplace=True)
+        # Ensure Date column is properly formatted
+        if 'Date' in data.columns:
+            data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+            if data['Date'].isnull().any():
+                print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
+                earliest_date = data['Date'].dropna().min()
+                data['Date'].fillna(earliest_date, inplace=True)
+        else:
+            print(f"Date column missing in sheet {sheet_name}. Skipping...")
+            continue
 
-        # Get the last historical date
         last_date = data['Date'].max()
         print(f"Last historical date: {last_date}")
 
@@ -61,9 +60,9 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
             continue
 
-        X = data[['Date']].copy()
-        X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
-        y = data[kpi_column].values
+        data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
+        X = data[['DateNumeric']]
+        y = data[kpi_column]
 
         if np.any(np.isnan(y)) or np.any(np.isinf(y)):
             print(f"Invalid values in KPI column {kpi_column}. Skipping...")
@@ -75,19 +74,15 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             model = XGBRegressor(random_state=42)
         elif best_model_name == 'Gradient Boosting':
             model = GradientBoostingRegressor(random_state=42)
-        elif best_model_name == 'Decision Tree':
-            model = DecisionTreeRegressor(random_state=42)
         elif best_model_name == 'Linear Regression':
             model = LinearRegression()
-        elif best_model_name == 'ElasticNet(alpha=0.1)':
-            model = ElasticNet(alpha=0.1, random_state=42)
         else:
             print(f"Unknown Model: {best_model_name} for KPI: {kpi_column}. Skipping.")
             continue
 
         try:
             # Split and train the model
-            X_train, X_test, y_train, y_test = train_test_split(X[['DateNumeric']], y, test_size=0.2, random_state=42)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
             model.fit(X_train, y_train)
             print(f"Model trained successfully for {kpi_column}")
 
