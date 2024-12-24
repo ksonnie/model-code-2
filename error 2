@@ -1,11 +1,5 @@
-AttributeError: 'RandomForestRegressor' object has no attribute 'estimators_'
-File <command-4405904758451644>, line 97
-     94     return pd.DataFrame(generate_predictions(data, kpi_columns, model))
-     96 # Process each BSO and model
----> 97 ffc_data_random_forest = run_model_predictions("FFC Proj", "USFFC", "RandomForestRegressor", model_kpi_mapping["RandomForestRegressor"])
-     98 ffc_data_gradient_boosting = run_model_predictions("FFC Proj", "USFFC", "GradientBoostingRegressor", model_kpi_mapping["GradientBoostingRegressor"])
-     99 ffc_data_decision_tree = run_model_predictions("FFC Proj", "USFFC", "DecisionTreeRegressor", model_kpi_mapping["DecisionTreeRegressor"])
-File /databricks/python/lib/python3.10/site-packages/sklearn/ensemble/_base.py:195, in BaseEnsemble.__len__(self)
-    193 def __len__(self):
-    194     """Return the number of estimators in the ensemble."""
---> 195     return len(self.estimators_)
+ValueError: mixed datetimes and integers in passed array
+File <command-4405904758451669>, line 72
+     70 sheet_name = "FFC Proj"
+     71 data = load_data(sheet_name)
+---> 72 final_data = generate_predictions_with_kpi(data, kpi_columns)
