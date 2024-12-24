@@ -1,11 +1,11 @@
-TypeError: '>=' not supported between instances of 'Timestamp' and 'int'
-File <command-1730256386727003>, line 129
-    126     return consolidated_df
-    128 # Process all BSO sheets and consolidate the results
---> 129 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-    131 # Display consolidated results
-    132 print(consolidated_results)
-File /databricks/python/lib/python3.10/site-packages/numpy/core/_methods.py:40, in _amax(a, axis, out, keepdims, initial, where)
-     38 def _amax(a, axis=None, out=None, keepdims=False,
-     39           initial=_NoValue, where=True):
----> 40     return umr_maximum(a, axis, None, out, keepdims, initial, where)
+TypeError: '<=' not supported between instances of 'Timestamp' and 'int'
+File <command-1730256386727003>, line 121
+    118     return consolidated_df
+    120 # Process all BSO sheets and consolidate the results
+--> 121 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
+    123 # Display consolidated results
+    124 print(consolidated_results)
+File /databricks/python/lib/python3.10/site-packages/numpy/core/_methods.py:44, in _amin(a, axis, out, keepdims, initial, where)
+     42 def _amin(a, axis=None, out=None, keepdims=False,
+     43           initial=_NoValue, where=True):
+---> 44     return umr_minimum(a, axis, None, out, keepdims, initial, where)
