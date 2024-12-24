@@ -52,7 +52,7 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
             continue
 
         # Convert dates to numeric format
-        data['DateNumeric'] = (data['Date'] - data['Date'].min()).dt.days
+        data['DateNumeric'] = (data['Date'] - pd.Timestamp("1970-01-01")).dt.days
 
         last_date_numeric = data['DateNumeric'].max()
         print(f"Last numeric date in {sheet_name}: {last_date_numeric}")
@@ -92,13 +92,14 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
             # Iteratively predict for the next 3 weeks
             for _ in range(3):  # Predict for the next 3 weeks
+                # Calculate next future date
                 next_date_numeric = last_date_numeric + 7
 
                 # Prepare data for the future date
                 future_feature = pd.DataFrame({'DateNumeric': [next_date_numeric]})
 
                 future_prediction = model.predict(future_feature)[0]
-                print(f"Prediction for next date {next_date_numeric}: {future_prediction}")
+                print(f"Prediction for next date numeric {next_date_numeric}: {future_prediction}")
 
                 # Add the prediction as part of historical data
                 new_row = {'DateNumeric': next_date_numeric, kpi_column: future_prediction}
