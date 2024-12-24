@@ -2,130 +2,105 @@ import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import PowerTransformer
+import numpy as np
 
 # Initialize Spark session
-spark = SparkSession.builder.appName("Round Columns").getOrCreate()
+spark = SparkSession.builder.appName("Per Model Prediction").getOrCreate()
 
-# Define a UDF to round up values
-def custom_round(value):
-    if value is not None:
-        return int(value) + (1 if value - int(value) > 0.5 else 0)
-    return None
+# Define the KPI columns for each model
+model_kpi_mapping = {
+    'RandomForestRegressor': [
+        'NULOs that Remain High Priority',
+        'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'
+    ],
+    'GradientBoostingRegressor': [
+        'RBC Level- Total Negative Authorizations',
+        'Negative Liquidations - Travel (DTC: CS, CT, TO)'
+    ],
+    'DecisionTreeRegressor': [
+        'RBC Level- Total Negative Billed',
+        'Cost Transfer Allocation - "COE"'
+    ],
+    'LinearRegression': [
+        'Permanent Journal Vouchers',
+        'Invalid LOA'
+    ]
+}
 
-# Register the UDF
-round_udf = F.udf(custom_round, IntegerType())
-
-# Function to read, process, and round data
-def process_data(sheet_name, bso_name):
-    # Read the sheet into a DataFrame
+# Load data
+def load_data(sheet_name, bso_name):
     data = pd.read_excel("/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx", sheet_name=sheet_name)
+    data['BSO'] = bso_name  # Add the BSO column
+    return data
+
+# Prediction logic
+def generate_predictions(data, kpi_columns, model):
+    predictions = []
+    data['Date'] = pd.to_datetime(data['Date'])
+    data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)  # Convert Date to numeric
     
-    # Convert Pandas DataFrame to Spark DataFrame
-    data_spark = spark.createDataFrame(data)
-    
-    # Get all columns excluding the first column (date)
-    all_columns = data_spark.columns
-    columns_to_round = all_columns[1:]  # Skip the first column
+    for kpi_column in kpi_columns:
+        if kpi_column not in data.columns:
+            print(f"KPI column {kpi_column} not found. Skipping...")
+            continue
 
-    # Apply custom rounding to each specified column
-    for column in columns_to_round:
-        data_spark = data_spark.withColumn(column, round_udf(data_spark[column]))
+        X = data[['DateNumeric']]
+        y = data[kpi_column].values
 
-    # Add BSO column
-    data_spark = data_spark.withColumn('BSO', F.lit(bso_name))
-    
-    return data_spark
+        # Apply transformation
+        transformer = PowerTransformer()
+        y_transformed = transformer.fit_transform(y.reshape(-1, 1)).flatten()
 
-# Process each BSO data
-ffc_data = process_data("FFC Proj", 'USFFC')
-resfor_data = process_data("RESFOR Proj", 'RESFOR')
-pacflt_data = process_data("PACFLT Proj", 'PACFLT')
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=0.2, random_state=42)
+        
+        # Fit the model
+        model.fit(X_train, y_train)
+        
+        # Generate future dates
+        last_date = data['Date'].max()
+        future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
+        future_numeric = pd.DataFrame({'DateNumeric': [d.toordinal() for d in future_dates]})
 
-# Specify the columns for KPI_Count_High
-kpi_count_high_columns = [
-    'NULOs that Remain High Priority',
-    'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)',
-    'RBC Level- Total Negative Billed',
-    'RBC Level- Total Negative Authorizations',
-    'RON Level- Total Negative Reimbursable Collected',
-    'Negative Liquidations - Travel (DTC: CS, CT, TO)',
-    'Permanent Journal Vouchers',
-    'OTA w/ Closed RON',
-    'Negative Liquidations - Other',
-    'OTA w/ Excluded Purchase Order (PO)',
-    'Negative Liquidations - Foreign Currency',
-    'Cost Transfer Allocation - "COE"',
-    'ZMIL Negative Quantity / Positive Liquidation Amounts',
-    'Cost Transfer Allocation - "L"',
-    'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN',
-    'Invalid LOA'
-]
+        # Make predictions
+        future_preds = model.predict(future_numeric)
+        future_preds_original = transformer.inverse_transform(future_preds.reshape(-1, 1)).flatten()
 
-# Function to run Random Forest model on a DataFrame
-def run_random_forest(data):
-    data = data.dropna()  # Handle missing values
-    data = data.toPandas()  # Convert to Pandas DataFrame for sklearn processing
-    data['Date'] = pd.to_datetime(data['Date'])  # Ensure Date is in datetime format
-    data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)  # Convert Date to numeric format
+        # Store predictions
+        for date, pred in zip(future_dates, future_preds_original):
+            predictions.append({'Date': date, 'KPI': kpi_column, 'Prediction': pred, 'BSO': data['BSO'].iloc[0]})
 
-    # Prepare future dates for prediction (next 3 weeks)
-    last_date = data['Date'].max()
-    future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
-    future_numeric = pd.Series(future_dates).map(pd.Timestamp.toordinal).to_frame(name='DateNumeric')
+    return predictions
 
-    # DataFrame to hold all future predictions
-    future_predictions_df = pd.DataFrame({'Date': future_dates})
+# Run predictions for each model
+def run_model_predictions(sheet_name, bso_name, model_name, kpi_columns):
+    data = load_data(sheet_name, bso_name)
+    model_map = {
+        'RandomForestRegressor': RandomForestRegressor(random_state=42),
+        'GradientBoostingRegressor': GradientBoostingRegressor(random_state=42),
+        'DecisionTreeRegressor': DecisionTreeRegressor(random_state=42),
+        'LinearRegression': LinearRegression()
+    }
+    model = model_map.get(model_name)
+    if not model:
+        print(f"Model {model_name} not found.")
+        return pd.DataFrame()
 
-    for column in kpi_count_high_columns:
-        if column in data.columns:
-            X = data[['DateNumeric']]
-            y = data[column].values
+    return pd.DataFrame(generate_predictions(data, kpi_columns, model))
 
-            # Apply transformation
-            transformer = PowerTransformer()
-            y_transformed = transformer.fit_transform(y.reshape(-1, 1)).flatten()
+# Process each BSO and model
+ffc_data_random_forest = run_model_predictions("FFC Proj", "USFFC", "RandomForestRegressor", model_kpi_mapping["RandomForestRegressor"])
+ffc_data_gradient_boosting = run_model_predictions("FFC Proj", "USFFC", "GradientBoostingRegressor", model_kpi_mapping["GradientBoostingRegressor"])
+ffc_data_decision_tree = run_model_predictions("FFC Proj", "USFFC", "DecisionTreeRegressor", model_kpi_mapping["DecisionTreeRegressor"])
+ffc_data_linear_regression = run_model_predictions("FFC Proj", "USFFC", "LinearRegression", model_kpi_mapping["LinearRegression"])
 
-            # Split data
-            X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=0.2, random_state=42)
+# Combine results for all models
+all_predictions = pd.concat([ffc_data_random_forest, ffc_data_gradient_boosting, ffc_data_decision_tree, ffc_data_linear_regression], ignore_index=True)
 
-            # Initialize Random Forest model
-            model = RandomForestRegressor(random_state=42)
-
-            # Train the model
-            model.fit(X_train, y_train)
-
-            # Predictions
-            future_predictions = model.predict(future_numeric)
-
-            # Transform back the predictions
-            future_predictions = transformer.inverse_transform(future_predictions.reshape(-1, 1)).flatten()
-
-            # Store predictions in the future predictions DataFrame
-            future_predictions_df[column] = future_predictions
-
-      # Add the BSO column to the predictions
-    future_predictions_df['BSO'] = data['BSO'].iloc[0]  # Use the BSO value from the original data
-
-    return future_predictions_df
-
-# Run the Random Forest model for each DataFrame and collect predictions
-ffc_predictions = run_random_forest(ffc_data)
-resfor_predictions = run_random_forest(resfor_data)
-pacflt_predictions = run_random_forest(pacflt_data)
-
-# Combine all predictions into a single DataFrame
-final_predictions_df = pd.concat([ffc_predictions, resfor_predictions, pacflt_predictions], ignore_index=True)
-
-# Append the original data with the predictions (if needed)
-combined_data = pd.concat([ffc_data.toPandas(), resfor_data.toPandas(), pacflt_data.toPandas()], ignore_index=True)
-final_data_with_predictions = pd.concat([combined_data, final_predictions_df], ignore_index=True)
-final_data_with_predictions['Date'] = pd.to_datetime(final_data_with_predictions['Date']).dt.strftime('%m/%d/%Y')
-
-# Convert the final DataFrame back to a Spark DataFrame
-final_data_with_predictions_spark = spark.createDataFrame(final_data_with_predictions)
-
-# Display the Spark DataFrame
-final_data_with_predictions_spark.show()
+# Show the final DataFrame
+print(all_predictions)
