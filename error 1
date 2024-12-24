@@ -17,7 +17,7 @@ kpi_columns = [
     "RBC Level- Total Negative Authorizations",
 ]
 
-# Function to preprocess and predict KPI values using dynamic historical data
+# Function to preprocess, predict, and append predictions to the original data
 def process_and_predict(sheet_name, kpi_columns):
     # Load the data
     data = pd.read_excel(file_path, sheet_name=sheet_name)
@@ -30,8 +30,8 @@ def process_and_predict(sheet_name, kpi_columns):
     # Initialize the MinMaxScaler
     scaler = MinMaxScaler()
 
-    # DataFrame to hold predictions
-    predictions_list = []
+    # DataFrame to hold results
+    result_data = data.copy()
 
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
@@ -67,10 +67,7 @@ def process_and_predict(sheet_name, kpi_columns):
 
                 # Append the prediction to the historical data
                 new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
-                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-
-                # Store the prediction
-                predictions_list.append({'Date': next_date, 'KPI': kpi_column, 'Prediction': next_prediction})
+                result_data = pd.concat([result_data, pd.DataFrame([new_row])], ignore_index=True)
 
                 # Update historical data for the next iteration
                 X_scaled = np.append(X_scaled, [[next_date_numeric]], axis=0)
@@ -80,12 +77,20 @@ def process_and_predict(sheet_name, kpi_columns):
                 # Update the last date
                 last_date = next_date
 
-    # Convert predictions to a DataFrame
-    predictions_df = pd.DataFrame(predictions_list)
-    return predictions_df
+    # Sort the final DataFrame by date
+    result_data = result_data.sort_values(by='Date').reset_index(drop=True)
+
+    # Drop the DateNumeric column before returning the result
+    result_data = result_data.drop(columns=['DateNumeric'])
+    return result_data
 
 # Process each sheet and generate predictions
+final_results = pd.DataFrame()
 for bso, sheet_name in bso_sheets.items():
     print(f"Processing BSO: {bso}")
     predictions = process_and_predict(sheet_name, kpi_columns)
-    print(predictions)
+    predictions['BSO'] = bso  # Add the BSO column to the results
+    final_results = pd.concat([final_results, predictions], ignore_index=True)
+
+# Display the final DataFrame
+print(final_results)
