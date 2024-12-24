@@ -90,3 +90,11 @@ def process_kpi_columns(data, kpi_columns):
 
     # Ensure the Date column is formatted correctly
     final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')
+    return final_data
+
+# Main execution
+data = load_data(file_path, sheet_name)
+final_data = process_kpi_columns(data, kpi_columns)
+
+# Display the final result
+print(final_data)
