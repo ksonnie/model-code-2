@@ -1,16 +1,10 @@
 import pandas as pd
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import PowerTransformer
 import numpy as np
-
-# Initialize Spark session
-spark = SparkSession.builder.appName("Per Model Prediction").getOrCreate()
 
 # Define the KPI columns for each model
 model_kpi_mapping = {
@@ -43,7 +37,7 @@ def generate_predictions(data, kpi_columns, model):
     predictions = []
     data['Date'] = pd.to_datetime(data['Date'])
     data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)  # Convert Date to numeric
-    
+
     for kpi_column in kpi_columns:
         if kpi_column not in data.columns:
             print(f"KPI column {kpi_column} not found. Skipping...")
@@ -52,12 +46,22 @@ def generate_predictions(data, kpi_columns, model):
         X = data[['DateNumeric']]
         y = data[kpi_column].values
 
+        # Check for valid data
+        if len(X) == 0 or len(y) == 0:
+            print(f"No data available for KPI column {kpi_column}. Skipping...")
+            continue
+
         # Apply transformation
         transformer = PowerTransformer()
         y_transformed = transformer.fit_transform(y.reshape(-1, 1)).flatten()
 
         # Train-test split
         X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=0.2, random_state=42)
+        
+        # Ensure train data is not empty
+        if len(X_train) == 0 or len(y_train) == 0:
+            print(f"Empty training set for KPI column {kpi_column}. Skipping...")
+            continue
         
         # Fit the model
         model.fit(X_train, y_train)
