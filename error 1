@@ -1,123 +1,131 @@
-%pip install lightgbm
-%pip install xgboost
-
 import pandas as pd
-import numpy as np
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import IntegerType
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, ElasticNet
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
+from sklearn.preprocessing import PowerTransformer
 
-# File path and relevant BSO sheets
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-bso_sheets = {
-    'USFFC': 'FFC Proj'
-}
+# Initialize Spark session
+spark = SparkSession.builder.appName("Round Columns").getOrCreate()
 
-# Model Mapping Dictionary: BSO, KPI Column, and Best Model
-model_mapping = {
-    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor',
-    ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor',
-    ('USFFC', 'RBC Level- Total Negative Billed'): 'XGBoost Regressor',
-    ('USFFC', 'RBC Level- Total Negative Authorizations'): 'Gradient Boosting'
-}
+# Define a UDF to round up values
+def custom_round(value):
+    if value is not None:
+        return int(value) + (1 if value - int(value) > 0.5 else 0)
+    return None
 
-# Function to replace NA with zeros
-def replace_na_with_zeros(df):
-    return df.fillna(0)
+# Register the UDF
+round_udf = F.udf(custom_round, IntegerType())
 
-# Function to process BSO sheets and make predictions
-def process_bso_sheets(file_path, bso_sheets, model_mapping):
-    consolidated_data = []
+# Function to read, process, and round data
+def process_data(sheet_name, bso_name):
+    # Read the sheet into a DataFrame
+    data = pd.read_excel("/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx", sheet_name=sheet_name)
+    
+    # Convert Pandas DataFrame to Spark DataFrame
+    data_spark = spark.createDataFrame(data)
+    
+    # Get all columns excluding the first column (date)
+    all_columns = data_spark.columns
+    columns_to_round = all_columns[1:]  # Skip the first column
 
-    for (bso, kpi_column), best_model_name in model_mapping.items():
-        print(f"Processing BSO: {bso}, KPI: {kpi_column}, Model: {best_model_name}")
+    # Apply custom rounding to each specified column
+    for column in columns_to_round:
+        data_spark = data_spark.withColumn(column, round_udf(data_spark[column]))
 
-        # Identify the corresponding sheet for this BSO
-        if bso not in bso_sheets:
-            print(f"BSO {bso} not found in bso_sheets. Skipping.")
-            continue
+    # Add BSO column
+    data_spark = data_spark.withColumn('BSO', F.lit(bso_name))
+    
+    return data_spark
 
-        sheet_name = bso_sheets[bso]
+# Process each BSO data
+ffc_data = process_data("FFC Proj", 'USFFC')
+resfor_data = process_data("RESFOR Proj", 'RESFOR')
+pacflt_data = process_data("PACFLT Proj", 'PACFLT')
 
-        # Read the relevant sheet
-        data = pd.read_excel(file_path, sheet_name=sheet_name)
-        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+# Specify the columns for KPI_Count_High
+kpi_count_high_columns = [
+    'NULOs that Remain High Priority',
+    'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)',
+    'RBC Level- Total Negative Billed',
+    'RBC Level- Total Negative Authorizations',
+    'RON Level- Total Negative Reimbursable Collected',
+    'Negative Liquidations - Travel (DTC: CS, CT, TO)',
+    'Permanent Journal Vouchers',
+    'OTA w/ Closed RON',
+    'Negative Liquidations - Other',
+    'OTA w/ Excluded Purchase Order (PO)',
+    'Negative Liquidations - Foreign Currency',
+    'Cost Transfer Allocation - "COE"',
+    'ZMIL Negative Quantity / Positive Liquidation Amounts',
+    'Cost Transfer Allocation - "L"',
+    'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN',
+    'Invalid LOA'
+]
 
-        # Handle invalid dates
-        if data['Date'].isnull().any():
-            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
-            earliest_date = data['Date'].dropna().min()
-            data['Date'].fillna(earliest_date, inplace=True)
+# Function to run Random Forest model on a DataFrame
+def run_random_forest(data):
+    data = data.dropna()  # Handle missing values
+    data = data.toPandas()  # Convert to Pandas DataFrame for sklearn processing
+    data['Date'] = pd.to_datetime(data['Date'])  # Ensure Date is in datetime format
+    data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)  # Convert Date to numeric format
 
-        last_date = data['Date'].max()
-        print(f"Last Date in {sheet_name}: {last_date}")
+    # Prepare future dates for prediction (next 3 weeks)
+    last_date = data['Date'].max()
+    future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
+    future_numeric = pd.Series(future_dates).map(pd.Timestamp.toordinal).to_frame(name='DateNumeric')
 
-        # Prepare data for modeling
-        if kpi_column not in data.columns:
-            print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
-            continue
+    # DataFrame to hold all future predictions
+    future_predictions_df = pd.DataFrame({'Date': future_dates})
 
-        # Ensure 'DateNumeric' is consistent
-        data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
+    for column in kpi_count_high_columns:
+        if column in data.columns:
+            X = data[['DateNumeric']]
+            y = data[column].values
 
-        X = data[['DateNumeric']]
-        y = data[kpi_column].values
+            # Apply transformation
+            transformer = PowerTransformer()
+            y_transformed = transformer.fit_transform(y.reshape(-1, 1)).flatten()
 
-        if np.any(np.isnan(y)) or np.any(np.isinf(y)):
-            print(f"Invalid values in KPI column {kpi_column} for BSO {bso}. Skipping...")
-            continue
+            # Split data
+            X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=0.2, random_state=42)
 
-        # Train the model
-        if best_model_name == 'XGBoost Regressor':
-            model = XGBRegressor(random_state=42)
-        elif best_model_name == 'Gradient Boosting':
-            model = GradientBoostingRegressor(random_state=42)
-        elif best_model_name == 'Decision Tree':
-            model = DecisionTreeRegressor(random_state=42)
-        elif best_model_name == 'Linear Regression':
-            model = LinearRegression()
-        elif best_model_name == 'ElasticNet(alpha=0.1)':
-            model = ElasticNet(alpha=0.1, random_state=42)
-        else:
-            print(f"Unknown Model: {best_model_name} for KPI: {kpi_column}. Skipping.")
-            continue
+            # Initialize Random Forest model
+            model = RandomForestRegressor(random_state=42)
 
-        try:
-            # Split the data for training
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            # Train the model
             model.fit(X_train, y_train)
-            print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
-            # Iteratively predict for each future date
-            for _ in range(3):  # Predict for the next 3 weeks
-                next_date = last_date + pd.Timedelta(days=7)
+            # Predictions
+            future_predictions = model.predict(future_numeric)
 
-                # Prepare data for the future date
-                next_date_numeric = next_date.toordinal()
-                prediction = model.predict([[next_date_numeric]])[0]
-                print(f"Prediction for {next_date}: {prediction}")
+            # Transform back the predictions
+            future_predictions = transformer.inverse_transform(future_predictions.reshape(-1, 1)).flatten()
 
-                # Add the prediction as part of historical data
-                new_row = {'Date': next_date, 'DateNumeric': next_date_numeric, kpi_column: prediction}
-                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+            # Store predictions in the future predictions DataFrame
+            future_predictions_df[column] = future_predictions
 
-                # Update last_date for the next iteration
-                last_date = next_date
+      # Add the BSO column to the predictions
+    future_predictions_df['BSO'] = data['BSO'].iloc[0]  # Use the BSO value from the original data
 
-        except Exception as e:
-            print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
-            continue
+    return future_predictions_df
 
-        consolidated_data.append(data)
+# Run the Random Forest model for each DataFrame and collect predictions
+ffc_predictions = run_random_forest(ffc_data)
+resfor_predictions = run_random_forest(resfor_data)
+pacflt_predictions = run_random_forest(pacflt_data)
 
-    # Combine all data into a single DataFrame
-    consolidated_df = pd.concat(consolidated_data, ignore_index=True)
-    return consolidated_df
+# Combine all predictions into a single DataFrame
+final_predictions_df = pd.concat([ffc_predictions, resfor_predictions, pacflt_predictions], ignore_index=True)
 
-# Process all BSO sheets and consolidate the results
-consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
+# Append the original data with the predictions (if needed)
+combined_data = pd.concat([ffc_data.toPandas(), resfor_data.toPandas(), pacflt_data.toPandas()], ignore_index=True)
+final_data_with_predictions = pd.concat([combined_data, final_predictions_df], ignore_index=True)
+final_data_with_predictions['Date'] = pd.to_datetime(final_data_with_predictions['Date']).dt.strftime('%m/%d/%Y')
 
-# Display consolidated results
-print(consolidated_results)
+# Convert the final DataFrame back to a Spark DataFrame
+final_data_with_predictions_spark = spark.createDataFrame(final_data_with_predictions)
+
+# Display the Spark DataFrame
+final_data_with_predictions_spark.show()
