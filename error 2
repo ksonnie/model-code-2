@@ -1,24 +1,7 @@
-TypeError: unsupported operand type(s) for -: 'numpy.ndarray' and 'Timestamp'
-File <command-1730256386727003>, line 122
-    119     return consolidated_df
-    121 # Process all BSO sheets and consolidate the results
---> 122 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-    124 # Display consolidated results
-    125 print(consolidated_results)
-File /databricks/python/lib/python3.10/site-packages/pandas/core/ops/array_ops.py:218, in arithmetic_op(left, right, op)
-    205 # NB: We assume that extract_array and ensure_wrapped_if_datetimelike
-    206 #  have already been called on `left` and `right`,
-    207 #  and `maybe_prepare_scalar_for_op` has already been called on `right`
-    208 # We need to special-case datetime64/timedelta64 dtypes (e.g. because numpy
-    209 # casts integer dtypes to timedelta64 when operating with timedelta64 - GH#22390)
-    211 if (
-    212     should_extension_dispatch(left, right)
-    213     or isinstance(right, (Timedelta, BaseOffset, Timestamp))
-   (...)
-    216     # Timedelta/Timestamp and other custom scalars are included in the check
-    217     # because numexpr will fail on it, see GH#31457
---> 218     res_values = op(left, right)
-    219 else:
-    220     # TODO we should handle EAs consistently and move this check before the if/else
-    221     # (https://github.com/pandas-dev/pandas/issues/41165" target="_blank" rel="noopener noreferrer">https://github.com/pandas-dev/pandas/issues/41165</a>)</span>
-    222     _bool_arith_check(op, left, right)
+ValueError: mixed datetimes and integers in passed array
+File <command-1730256386727003>, line 127
+    124     return consolidated_df
+    126 # Process all BSO sheets and consolidate the results
+--> 127 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
+    129 # Display consolidated results
+    130 print(consolidated_results)
