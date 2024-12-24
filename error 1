@@ -18,7 +18,7 @@ kpi_columns = [
 ]
 
 # Function to preprocess, predict, and append predictions to the original data
-def process_and_predict(sheet_name, kpi_columns):
+def process_and_predict_with_history(sheet_name, kpi_columns):
     # Load the data
     data = pd.read_excel(file_path, sheet_name=sheet_name)
     data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
@@ -71,12 +71,21 @@ def process_and_predict(sheet_name, kpi_columns):
                 # Append the prediction to the list
                 future_predictions.append({
                     'Date': next_date,
-                    'KPI': kpi_column,
                     kpi_column: next_prediction
                 })
 
                 # Update the last date
                 last_date = next_date
+
+                # Add the prediction to historical data for the next prediction
+                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+
+                # Update training data with the new prediction
+                X = data[['DateNumeric']]
+                y = data[kpi_column]
+                X_scaled = scaler.fit_transform(X)
+                model.fit(X_scaled, y)
 
             # Append the future predictions to the result_data
             future_df = pd.DataFrame(future_predictions)
@@ -93,7 +102,7 @@ def process_and_predict(sheet_name, kpi_columns):
 final_results = pd.DataFrame()
 for bso, sheet_name in bso_sheets.items():
     print(f"Processing BSO: {bso}")
-    predictions = process_and_predict(sheet_name, kpi_columns)
+    predictions = process_and_predict_with_history(sheet_name, kpi_columns)
     predictions['BSO'] = bso  # Add the BSO column to the results
     final_results = pd.concat([final_results, predictions], ignore_index=True)
 
