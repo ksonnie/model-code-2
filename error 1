@@ -1,28 +1,3 @@
-import pandas as pd
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.preprocessing import MinMaxScaler
-import numpy as np
-
-# File path and relevant sheet name
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-sheet_name = "FFC Proj"
-
-# List of KPI columns to process
-kpi_columns = [
-    "NULOs that Remain High Priority",
-    "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
-    "RBC Level- Total Negative Billed",
-    "RBC Level- Total Negative Authorizations",
-    # Add more KPI columns as required
-]
-
-# Load the Excel data
-def load_data(file_path, sheet_name):
-    data = pd.read_excel(file_path, sheet_name=sheet_name)
-    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-    data.dropna(subset=['Date'], inplace=True)  # Drop rows with invalid dates
-    return data
-
 # Function to process all KPI columns and add predictions for each date
 def process_kpi_columns(data, kpi_columns):
     scaler = MinMaxScaler()
@@ -84,17 +59,3 @@ def process_kpi_columns(data, kpi_columns):
 
             # Add predictions to the future dates DataFrame
             predictions[kpi_column] = future_predictions
-
-    # Combine original data with the predictions
-    final_data = pd.concat([data, predictions], ignore_index=True)
-    final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
-    return final_data
-
-# Main execution
-data = load_data(file_path, sheet_name)
-final_data = process_kpi_columns(data, kpi_columns)
-columns_to_keep = ["Date"] + kpi_columns
-final_data = final_data[columns_to_keep]
-
-# Display final data
-print(final_data)
