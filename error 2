@@ -1,10 +1,10 @@
 TypeError: '>=' not supported between instances of 'Timestamp' and 'int'
-File <command-1730256386727003>, line 127
-    124     return consolidated_df
-    126 # Process all BSO sheets and consolidate the results
---> 127 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-    129 # Display consolidated results
-    130 print(consolidated_results)
+File <command-1730256386727003>, line 129
+    126     return consolidated_df
+    128 # Process all BSO sheets and consolidate the results
+--> 129 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
+    131 # Display consolidated results
+    132 print(consolidated_results)
 File /databricks/python/lib/python3.10/site-packages/numpy/core/_methods.py:40, in _amax(a, axis, out, keepdims, initial, where)
      38 def _amax(a, axis=None, out=None, keepdims=False,
      39           initial=_NoValue, where=True):
