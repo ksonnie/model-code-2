@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import PowerTransformer
 import numpy as np
 
-# Define the KPI columns for each model
+# Define KPI columns for each model
 model_kpi_mapping = {
     'RandomForestRegressor': [
         'NULOs that Remain High Priority',
@@ -28,14 +28,15 @@ model_kpi_mapping = {
 
 # Load data
 def load_data(sheet_name, bso_name):
+    print(f"Loading data for sheet: {sheet_name}, BSO: {bso_name}")
     data = pd.read_excel("/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx", sheet_name=sheet_name)
     data['BSO'] = bso_name  # Add the BSO column
+    data['Date'] = pd.to_datetime(data['Date'])  # Convert Date column to datetime
     return data
 
-# Prediction logic
+# Generate predictions
 def generate_predictions(data, kpi_columns, model):
     predictions = []
-    data['Date'] = pd.to_datetime(data['Date'])
     data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)  # Convert Date to numeric
 
     for kpi_column in kpi_columns:
@@ -46,43 +47,54 @@ def generate_predictions(data, kpi_columns, model):
         X = data[['DateNumeric']]
         y = data[kpi_column].values
 
-        # Check for valid data
         if len(X) == 0 or len(y) == 0:
             print(f"No data available for KPI column {kpi_column}. Skipping...")
             continue
 
         # Apply transformation
         transformer = PowerTransformer()
-        y_transformed = transformer.fit_transform(y.reshape(-1, 1)).flatten()
+        try:
+            y_transformed = transformer.fit_transform(y.reshape(-1, 1)).flatten()
+        except Exception as e:
+            print(f"Error transforming KPI {kpi_column}: {e}. Skipping...")
+            continue
 
         # Train-test split
         X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=0.2, random_state=42)
-        
-        # Ensure train data is not empty
+
         if len(X_train) == 0 or len(y_train) == 0:
-            print(f"Empty training set for KPI column {kpi_column}. Skipping...")
+            print(f"Empty training data for KPI column {kpi_column}. Skipping...")
             continue
-        
+
         # Fit the model
-        model.fit(X_train, y_train)
-        
+        try:
+            model.fit(X_train, y_train)
+            print(f"Model trained successfully for KPI: {kpi_column}")
+        except Exception as e:
+            print(f"Error training model for KPI {kpi_column}: {e}. Skipping...")
+            continue
+
         # Generate future dates
         last_date = data['Date'].max()
         future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
         future_numeric = pd.DataFrame({'DateNumeric': [d.toordinal() for d in future_dates]})
 
         # Make predictions
-        future_preds = model.predict(future_numeric)
-        future_preds_original = transformer.inverse_transform(future_preds.reshape(-1, 1)).flatten()
+        try:
+            future_preds = model.predict(future_numeric)
+            future_preds_original = transformer.inverse_transform(future_preds.reshape(-1, 1)).flatten()
 
-        # Store predictions
-        for date, pred in zip(future_dates, future_preds_original):
-            predictions.append({'Date': date, 'KPI': kpi_column, 'Prediction': pred, 'BSO': data['BSO'].iloc[0]})
+            for date, pred in zip(future_dates, future_preds_original):
+                predictions.append({'Date': date, 'KPI': kpi_column, 'Prediction': pred, 'BSO': data['BSO'].iloc[0]})
+
+        except Exception as e:
+            print(f"Error making predictions for KPI {kpi_column}: {e}")
 
     return predictions
 
-# Run predictions for each model
+# Run model predictions
 def run_model_predictions(sheet_name, bso_name, model_name, kpi_columns):
+    print(f"Running predictions for model: {model_name}, sheet: {sheet_name}, BSO: {bso_name}")
     data = load_data(sheet_name, bso_name)
     model_map = {
         'RandomForestRegressor': RandomForestRegressor(random_state=42),
