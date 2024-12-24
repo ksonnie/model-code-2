@@ -19,7 +19,8 @@ kpi_columns = [
 
 # Function to generate predictions and append them to the original data
 def generate_predictions_with_kpi(data, kpi_columns):
-    data['DateNumeric'] = pd.to_datetime(data['Date']).map(pd.Timestamp.toordinal)  # Convert date to numeric
+    data['Date'] = pd.to_datetime(data['Date'])  # Ensure Date column is in datetime format
+    data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)  # Convert Date to numeric ordinal format
     final_df = data[['Date']].copy()  # Start with just the date column
 
     for kpi_column in kpi_columns:
@@ -38,10 +39,10 @@ def generate_predictions_with_kpi(data, kpi_columns):
 
             # Start predictions
             future_predictions = []
-            last_date = pd.to_datetime(data['Date']).max()
-            future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]
+            last_date = data['Date'].max()  # Identify the latest date
+            future_dates = [last_date + pd.Timedelta(weeks=i) for i in range(1, 4)]  # Predict for 3 future weeks
 
-            for i, future_date in enumerate(future_dates):
+            for future_date in future_dates:
                 # Prepare data for prediction
                 future_date_numeric = scaler.transform([[future_date.toordinal()]])[0][0]
                 future_prediction = model.predict([[future_date_numeric]])[0]
@@ -62,8 +63,10 @@ def generate_predictions_with_kpi(data, kpi_columns):
             combined = pd.concat([data[['Date', kpi_column]], prediction_df], ignore_index=True)
             final_df = pd.merge(final_df, combined, on='Date', how='outer')
 
-    # Remove unnecessary columns, keeping only KPIs and dates
+    # Sort by Date and ensure consistent data
+    final_df['Date'] = pd.to_datetime(final_df['Date'])  # Ensure Date column remains in datetime format
     final_df.sort_values('Date', inplace=True)
+    final_df.reset_index(drop=True, inplace=True)
     return final_df
 
 # Example usage
