@@ -1,0 +1,130 @@
+%pip install lightgbm
+%pip install xgboost
+
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression, ElasticNet
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+from xgboost import XGBRegressor
+
+# File path and relevant BSO sheets
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+bso_sheets = {
+    'USFFC': 'FFC Proj'
+}
+
+# Model Mapping Dictionary: BSO, KPI Column, and Best Model
+model_mapping = {
+    ('USFFC', 'NULOs that Remain High Priority'): 'XGBoost Regressor',
+    ('USFFC', 'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)'): 'XGBoost Regressor',
+    ('USFFC', 'RBC Level- Total Negative Billed'): 'XGBoost Regressor',
+    ('USFFC', 'RBC Level- Total Negative Authorizations'): 'Gradient Boosting',
+    ('USFFC', 'RON Level- Total Negative Reimbursable Collected'): 'Decision Tree',
+    ('USFFC', 'Negative Liquidations - Travel (DTC: CS, CT, TO)'): 'Gradient Boosting',
+    ('USFFC', 'Permanent Journal Vouchers'): 'Linear Regression',
+    ('USFFC', 'OTA w/ Closed RON'): 'Linear Regression',
+    ('USFFC', 'Negative Liquidations - Other'): 'XGBoost Regressor',
+    ('USFFC', 'OTA w/ Excluded Purchase Order (PO)'): 'Linear Regression',
+    ('USFFC', 'Negative Liquidations - Foreign Currency'): 'XGBoost Regressor'
+}
+
+# Function to replace NA with zeros
+def replace_na_with_zeros(df):
+    return df.fillna(0)
+
+# Function to process BSO sheets and make predictions
+def process_bso_sheets(file_path, bso_sheets, model_mapping):
+    consolidated_data = []
+
+    for (bso, kpi_column), best_model_name in model_mapping.items():
+        print(f"Processing BSO: {bso}, KPI: {kpi_column}, Model: {best_model_name}")
+
+        # Identify the corresponding sheet for this BSO
+        if bso not in bso_sheets:
+            print(f"BSO {bso} not found in bso_sheets. Skipping.")
+            continue
+
+        sheet_name = bso_sheets[bso]
+
+        # Read the relevant sheet
+        data = pd.read_excel(file_path, sheet_name=sheet_name)
+        data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+        data = replace_na_with_zeros(data)
+
+        # Handle invalid dates
+        if data['Date'].isnull().any():
+            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
+            earliest_date = data['Date'].dropna().min()
+            data['Date'].fillna(earliest_date, inplace=True)
+
+        last_date = data['Date'].max()
+        print(f"Last Date in {sheet_name}: {last_date}")
+
+        # Prepare data for modeling
+        if kpi_column not in data.columns:
+            print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
+            continue
+
+        X = data[['Date']].copy()
+        X['WeekOfYear'] = X['Date'].dt.isocalendar().week
+        X['Year'] = X['Date'].dt.year
+        X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
+
+        y = data[kpi_column].values
+        if np.any(np.isnan(y)) or np.any(np.isinf(y)):
+            print(f"Invalid values in KPI column {kpi_column} for BSO {bso}. Skipping...")
+            continue
+
+        # Train the model
+        model = None
+        if best_model_name == 'XGBoost Regressor':
+            model = XGBRegressor(random_state=42)
+        elif best_model_name == 'Gradient Boosting':
+            model = GradientBoostingRegressor(random_state=42)
+        elif best_model_name == 'Decision Tree':
+            model = DecisionTreeRegressor(random_state=42)
+        elif best_model_name == 'Linear Regression':
+            model = LinearRegression()
+        elif best_model_name == 'ElasticNet(alpha=0.1)':
+            model = ElasticNet(alpha=0.1, random_state=42)
+        else:
+            print(f"Unknown Model: {best_model_name} for KPI: {kpi_column}. Skipping.")
+            continue
+
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
+            model.fit(X_train, y_train)
+            print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
+
+            # Iteratively predict for each future date
+            for _ in range(3):  # Predict for the next 3 weeks
+                next_date = last_date + pd.Timedelta(days=7)
+                future_feature = pd.DataFrame({'Date': [next_date]})
+                future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
+                future_feature['Year'] = future_feature['Date'].dt.year
+                future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
+
+                prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
+                print(f"Prediction for {next_date}: {prediction}")
+                new_row = {'Date': next_date, kpi_column: prediction}
+                data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+                last_date = next_date
+
+        except Exception as e:
+            print(f"Error during model training or prediction for KPI: {kpi_column}, BSO: {bso}: {e}")
+            continue
+
+        consolidated_data.append(data)
+
+    # Combine all data into a single DataFrame
+    consolidated_df = pd.concat(consolidated_data, ignore_index=True)
+    return consolidated_df
+
+# Process all BSO sheets and consolidate the results
+consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
+
+# Display consolidated results
+print(consolidated_results)
