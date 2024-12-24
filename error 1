@@ -48,24 +48,23 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
         # Handle invalid dates
         if data['Date'].isnull().any():
-            print(f"Invalid dates found in sheet: {sheet_name}. Replacing with earliest valid date.")
-            earliest_date = data['Date'].dropna().min()
-            data['Date'].fillna(earliest_date, inplace=True)
+            print(f"Invalid dates found in sheet: {sheet_name}. Skipping.")
+            continue
 
-        last_date = data['Date'].max()
-        print(f"Last Date in {sheet_name}: {last_date}")
+        # Convert dates to numeric format
+        data['DateNumeric'] = (data['Date'] - data['Date'].min()).dt.days
+
+        last_date_numeric = data['DateNumeric'].max()
+        print(f"Last numeric date in {sheet_name}: {last_date_numeric}")
 
         # Prepare data for modeling
         if kpi_column not in data.columns:
             print(f"KPI column {kpi_column} not found in sheet {sheet_name}. Skipping.")
             continue
 
-        X = data[['Date']].copy()
-        X['WeekOfYear'] = X['Date'].dt.isocalendar().week
-        X['Year'] = X['Date'].dt.year
-        X['DateNumeric'] = X['Date'].map(pd.Timestamp.toordinal)
-
+        X = data[['DateNumeric']]
         y = data[kpi_column].values
+
         if np.any(np.isnan(y)) or np.any(np.isinf(y)):
             print(f"Invalid values in KPI column {kpi_column} for BSO {bso}. Skipping...")
             continue
@@ -87,34 +86,27 @@ def process_bso_sheets(file_path, bso_sheets, model_mapping):
 
         try:
             # Train the model
-            X_train, X_test, y_train, y_test = train_test_split(
-                X[['DateNumeric', 'WeekOfYear', 'Year']], y, test_size=0.2, random_state=42)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
             model.fit(X_train, y_train)
             print(f"Model trained successfully for KPI: {kpi_column}, BSO: {bso}")
 
             # Iteratively predict for the next 3 weeks
-            future_predictions = []
-            for _ in range(3):
-                # Calculate next future date
-                next_date = last_date + pd.Timedelta(days=7)
+            for _ in range(3):  # Predict for the next 3 weeks
+                next_date_numeric = last_date_numeric + 7
 
                 # Prepare data for the future date
-                future_feature = pd.DataFrame({'Date': [next_date]})
-                future_feature['WeekOfYear'] = future_feature['Date'].dt.isocalendar().week
-                future_feature['Year'] = future_feature['Date'].dt.year
-                future_feature['DateNumeric'] = future_feature['Date'].map(pd.Timestamp.toordinal)
+                future_feature = pd.DataFrame({'DateNumeric': [next_date_numeric]})
 
-                future_prediction = model.predict(future_feature[['DateNumeric', 'WeekOfYear', 'Year']])[0]
-                print(f"Prediction for {next_date}: {future_prediction}")
+                future_prediction = model.predict(future_feature)[0]
+                print(f"Prediction for next date {next_date_numeric}: {future_prediction}")
 
                 # Add the prediction as part of historical data
-                new_row = {'Date': next_date, kpi_column: future_prediction}
+                new_row = {'DateNumeric': next_date_numeric, kpi_column: future_prediction}
                 data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
 
-                # Update historical data for cumulative prediction
-                last_date = next_date
+                # Update last_date_numeric for the next iteration
+                last_date_numeric = next_date_numeric
 
-            # Store the updated dataset
             consolidated_data.append(data)
 
         except Exception as e:
