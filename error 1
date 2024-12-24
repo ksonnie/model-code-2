@@ -33,6 +33,7 @@ def process_and_predict(sheet_name, kpi_columns):
     # DataFrame to hold results
     result_data = data.copy()
 
+    # Iterate through each KPI column
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
             print(f"Processing KPI: {kpi_column}")
@@ -57,6 +58,8 @@ def process_and_predict(sheet_name, kpi_columns):
 
             # Predict the next 3 weeks dynamically updating historical data
             last_date = data['Date'].max()
+            future_predictions = []
+
             for i in range(3):
                 # Calculate the next prediction date
                 next_date = last_date + pd.Timedelta(days=7)
@@ -65,17 +68,19 @@ def process_and_predict(sheet_name, kpi_columns):
                 next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
-                # Append the prediction to the historical data
-                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
-                result_data = pd.concat([result_data, pd.DataFrame([new_row])], ignore_index=True)
-
-                # Update historical data for the next iteration
-                X_scaled = np.append(X_scaled, [[next_date_numeric]], axis=0)
-                y = np.append(y, next_prediction)
-                model.fit(X_scaled, y)  # Retrain the model with updated data
+                # Append the prediction to the list
+                future_predictions.append({
+                    'Date': next_date,
+                    'KPI': kpi_column,
+                    kpi_column: next_prediction
+                })
 
                 # Update the last date
                 last_date = next_date
+
+            # Append the future predictions to the result_data
+            future_df = pd.DataFrame(future_predictions)
+            result_data = pd.concat([result_data, future_df[['Date', kpi_column]]], ignore_index=True)
 
     # Sort the final DataFrame by date
     result_data = result_data.sort_values(by='Date').reset_index(drop=True)
