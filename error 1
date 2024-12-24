@@ -89,7 +89,10 @@ def process_and_predict_with_history(sheet_name, kpi_columns):
 
             # Append the future predictions to the result_data
             future_df = pd.DataFrame(future_predictions)
-            result_data = pd.concat([result_data, future_df[['Date', kpi_column]]], ignore_index=True)
+            if kpi_column not in result_data.columns:
+                result_data = pd.merge(result_data, future_df, on='Date', how='outer')
+            else:
+                result_data = pd.concat([result_data, future_df[['Date', kpi_column]]], ignore_index=True)
 
     # Sort the final DataFrame by date
     result_data = result_data.sort_values(by='Date').reset_index(drop=True)
