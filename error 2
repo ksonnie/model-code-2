@@ -1,13 +1,11 @@
-ValueError: No objects to concatenate
-File <command-1730256386727003>, line 120
-    117     return consolidated_df
-    119 # Process all BSO sheets and consolidate the results
---> 120 consolidated_results = process_bso_sheets(file_path, bso_sheets, model_mapping)
-    122 # Display consolidated results
-    123 print(consolidated_results)
-File /databricks/python/lib/python3.10/site-packages/pandas/core/reshape/concat.py:425, in _Concatenator.__init__(self, objs, axis, join, keys, levels, names, ignore_index, verify_integrity, copy, sort)
-    422     objs = list(objs)
-    424 if len(objs) == 0:
---> 425     raise ValueError("No objects to concatenate")
-    427 if keys is None:
-    428     objs = list(com.not_none(*objs))
+AttributeError: 'RandomForestRegressor' object has no attribute 'estimators_'
+File <command-4405904758451644>, line 97
+     94     return pd.DataFrame(generate_predictions(data, kpi_columns, model))
+     96 # Process each BSO and model
+---> 97 ffc_data_random_forest = run_model_predictions("FFC Proj", "USFFC", "RandomForestRegressor", model_kpi_mapping["RandomForestRegressor"])
+     98 ffc_data_gradient_boosting = run_model_predictions("FFC Proj", "USFFC", "GradientBoostingRegressor", model_kpi_mapping["GradientBoostingRegressor"])
+     99 ffc_data_decision_tree = run_model_predictions("FFC Proj", "USFFC", "DecisionTreeRegressor", model_kpi_mapping["DecisionTreeRegressor"])
+File /databricks/python/lib/python3.10/site-packages/sklearn/ensemble/_base.py:195, in BaseEnsemble.__len__(self)
+    193 def __len__(self):
+    194     """Return the number of estimators in the ensemble."""
+--> 195     return len(self.estimators_)
