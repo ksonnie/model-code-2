@@ -1,79 +1,95 @@
-def process_and_predict_all_kpis(sheet_name, kpi_columns):
-    # Load the data
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import MinMaxScaler
+import numpy as np
+
+# File path and relevant sheet name
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+sheet_name = "FFC Proj"
+
+# List of KPI columns to process
+kpi_columns = [
+    "NULOs that Remain High Priority",
+    "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
+    "RBC Level- Total Negative Billed",
+    "RBC Level- Total Negative Authorizations",
+    # Add more KPI columns as required
+]
+
+# Load the Excel data
+def load_data(file_path, sheet_name):
     data = pd.read_excel(file_path, sheet_name=sheet_name)
     data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-    data = data.dropna(subset=['Date'])  # Drop rows with invalid dates
+    data.dropna(subset=['Date'], inplace=True)  # Drop rows with invalid dates
+    return data
 
-    # Prepare the result DataFrame
-    result_data = data.copy()
-    result_data['DateNumeric'] = result_data['Date'].map(pd.Timestamp.toordinal)
-
-    # Initialize the MinMaxScaler
+# Function to process each KPI column and append predictions
+def process_kpi_columns(data, kpi_columns):
     scaler = MinMaxScaler()
 
-    # Iterate through each KPI column
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
             print(f"Processing KPI: {kpi_column}")
 
-            # Create a copy of the data for this column's processing
-            column_data = result_data[['Date', 'DateNumeric', kpi_column]].copy()
-            column_data.dropna(subset=[kpi_column], inplace=True)  # Remove rows where KPI is NaN
+            # Prepare historical data for the current KPI
+            kpi_data = data[['Date', kpi_column]].copy()
+            kpi_data.dropna(subset=[kpi_column], inplace=True)  # Remove rows where KPI is NaN
 
-            # Skip if insufficient data
-            if column_data[kpi_column].nunique() <= 1:
-                print(f"Skipping {kpi_column}: insufficient or constant data.")
+            # Skip processing if insufficient data
+            if len(kpi_data) < 2:
+                print(f"Skipping {kpi_column}: insufficient data.")
                 continue
 
-            # Prepare data for model training
-            X = column_data[['DateNumeric']]
-            y = column_data[kpi_column]
+            # Convert Date to numeric for modeling
+            kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
+            X = kpi_data[['DateNumeric']]
+            y = kpi_data[kpi_column]
 
-            # Scale the input data
+            # Scale the numeric data
             X_scaled = scaler.fit_transform(X)
 
-            # Initialize the RandomForestRegressor model
+            # Initialize and train the Random Forest model
             model = RandomForestRegressor(random_state=42)
+            model.fit(X_scaled, y)
 
-            try:
-                # Train the model on historical data
+            # Predict for the next 3 weeks
+            last_date = kpi_data['Date'].max()
+            predictions = []
+
+            for i in range(3):
+                # Calculate the next date for prediction
+                next_date = last_date + pd.Timedelta(days=7)
+
+                # Prepare input for prediction
+                next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+                next_prediction = model.predict([[next_date_numeric]])[0]
+
+                # Append prediction
+                predictions.append({'Date': next_date, kpi_column: next_prediction})
+
+                # Update historical data with the predicted value
+                last_date = next_date
+                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
+
+                # Retrain the model with updated data
+                X = kpi_data[['DateNumeric']]
+                y = kpi_data[kpi_column]
+                X_scaled = scaler.fit_transform(X)
                 model.fit(X_scaled, y)
 
-                # Start predicting for the next 3 weeks
-                last_date = column_data['Date'].max()
-                future_predictions = []
+            # Convert predictions to a DataFrame and append to the original data
+            prediction_df = pd.DataFrame(predictions)
+            data = pd.concat([data, prediction_df], ignore_index=True)
 
-                for i in range(3):  # Predict for 3 future weeks
-                    # Calculate next date for prediction
-                    next_date = last_date + pd.Timedelta(days=7)
+    # Sort the data by Date and reset the index
+    data.sort_values(by='Date', inplace=True)
+    data.reset_index(drop=True, inplace=True)
+    return data
 
-                    # Prepare the input for prediction
-                    next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
-                    next_prediction = model.predict([[next_date_numeric]])[0]
+# Main execution
+data = load_data(file_path, sheet_name)
+final_data = process_kpi_columns(data, kpi_columns)
 
-                    # Append the prediction
-                    future_predictions.append({'Date': next_date, kpi_column: next_prediction})
-
-                    # Update the historical data with the prediction
-                    last_date = next_date
-                    new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
-                    column_data = pd.concat([column_data, pd.DataFrame([new_row])], ignore_index=True)
-
-                    # Retrain the model with updated data
-                    X = column_data[['DateNumeric']]
-                    y = column_data[kpi_column]
-                    X_scaled = scaler.fit_transform(X)
-                    model.fit(X_scaled, y)
-
-                # Append the future predictions to the result DataFrame
-                future_df = pd.DataFrame(future_predictions)
-                result_data = pd.concat([result_data, future_df[['Date', kpi_column]]], ignore_index=True)
-
-            except Exception as e:
-                print(f"Error processing {kpi_column}: {e}")
-
-    # Finalize the result
-    result_data = result_data.sort_values(by='Date').reset_index(drop=True)
-    result_data.drop(columns=['DateNumeric'], errors='ignore', inplace=True)
-
-    return result_data
+# Display the final DataFrame with predictions
+print(final_data)
