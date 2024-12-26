@@ -9,10 +9,10 @@ sheet_name = "FFC Proj"
 
 # List of KPI columns to process
 kpi_columns = [
-    "NULOs that Remain High Priority",
-    "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
-    "RBC Level- Total Negative Billed",
-    "RBC Level- Total Negative Authorizations",
+    "RON Level- Total Negative Reimbursable Collected",
+    'Cost Transfer Allocation - "COE"',
+    'Cost Transfer Allocation - "L"'
+    
 ]
 
 # Load the Excel data
@@ -97,4 +97,4 @@ data = load_data(file_path, sheet_name)
 final_data = process_kpi_columns(data, kpi_columns)
 
 # Display the final result
-print(final_data)
+display(final_data)
