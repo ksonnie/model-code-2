@@ -12,11 +12,7 @@ bso_name = "RESFOR"
 
 # List of KPI columns to process
 kpi_columns = [
-    "Permanent Journal Vouchers",
-    "OTA w/ Closed RON",
-    "OTA w/ Excluded Purchase Order (PO)",
-    "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN",
-    "Invalid LOA"
+    "Abnormal Accounts Payable (AAP)"
 ]
 
 # Load the Excel data
