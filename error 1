@@ -1,14 +1,37 @@
+import pandas as pd
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.preprocessing import MinMaxScaler
+import numpy as np
+
+# File path and relevant sheet name
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+sheet_name = "RESFOR Proj"
+
+# BSO Name
+bso_name = "RESFOR"
+
+# List of KPI columns to process
+kpi_columns = [
+    "Abnormal Accounts Payable (AAP)"
+]
+
+# Load the Excel data
+def load_data(file_path, sheet_name):
+    data = pd.read_excel(file_path, sheet_name=sheet_name)
+    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+    data.dropna(subset=['Date'], inplace=True)  # Drop rows with invalid dates
+    return data
+
+# Function to process all KPI columns and add predictions for each date
 def process_kpi_columns(data, kpi_columns, bso_name):
     scaler = MinMaxScaler()
     last_date = data['Date'].max()  # Get the latest date in the data
-    print(f"Last historical date: {last_date}")
 
     # Add BSO column to the data
     data['BSO'] = bso_name
 
     # Prepare a DataFrame to hold future predictions
     future_dates = [last_date + pd.Timedelta(days=7 * i) for i in range(1, 4)]
-    predictions = pd.DataFrame({'Date': future_dates, 'BSO': bso_name})
 
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
@@ -36,19 +59,14 @@ def process_kpi_columns(data, kpi_columns, bso_name):
             model.fit(X_scaled, y)
 
             # Generate predictions for the next 3 weeks
-            future_predictions = []
             current_last_date = last_date
-
             for i in range(3):
                 # Prepare input for prediction
                 next_date = current_last_date + pd.Timedelta(days=7)
                 next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
-                # Append prediction
-                future_predictions.append(next_prediction)
-
-                # Update historical data with the predicted value
+                # Append prediction to historical data
                 new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
                 kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
 
@@ -58,13 +76,23 @@ def process_kpi_columns(data, kpi_columns, bso_name):
                 X_scaled = scaler.fit_transform(X)
                 model.fit(X_scaled, y)
 
-                # Update the date for the next iteration
+                # Add the prediction to the data
+                data = pd.concat([data, pd.DataFrame([{kpi_column: next_prediction, 'Date': next_date, 'BSO': bso_name}])], ignore_index=True)
+
+                # Update the current last date
                 current_last_date = next_date
 
-            # Add predictions to the future dates DataFrame
-            predictions[kpi_column] = future_predictions
+    # Ensure the Date column is formatted correctly
+    data['Date'] = pd.to_datetime(data['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
+    return data
 
-    # Combine original data with the predictions
-    final_data = pd.concat([data, predictions], ignore_index=True)
-    final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
-    return final_data
+# Main execution
+data = load_data(file_path, sheet_name)
+final_data = process_kpi_columns(data, kpi_columns, bso_name)
+
+# Specify columns to keep
+columns_to_keep = ["Date", "BSO"] + kpi_columns
+final_data_with_bso = final_data[columns_to_keep]
+
+# Display the final result
+display(final_data_with_bso)
