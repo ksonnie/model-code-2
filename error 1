@@ -9,10 +9,10 @@ sheet_name = "FFC Proj"
 
 # List of KPI columns to process
 kpi_columns = [
-    "NULOs that Remain High Priority",
-    "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
-    "RBC Level- Total Negative Billed",
-    "RBC Level- Total Negative Authorizations",
+    "RON Level- Total Negative Reimbursable Collected",
+    'Cost Transfer Allocation - "COE"',
+    'Cost Transfer Allocation - "L"'
+    
 ]
 
 # Load the Excel data
@@ -27,7 +27,7 @@ def process_kpi_columns(data, kpi_columns):
     scaler = MinMaxScaler()
     last_date = data['Date'].max()  # Get the latest date in the data
 
-    # Prepare a copy of the original data
+    # Prepare a DataFrame to hold the original and predicted data
     final_data = data.copy()
 
     for kpi_column in kpi_columns:
@@ -35,7 +35,7 @@ def process_kpi_columns(data, kpi_columns):
             print(f"Processing KPI: {kpi_column}")
 
             # Prepare historical data for the current KPI
-            kpi_data = final_data[['Date', kpi_column]].copy()
+            kpi_data = data[['Date', kpi_column]].copy()
             kpi_data.dropna(subset=[kpi_column], inplace=True)  # Remove rows where KPI is NaN
 
             # Skip processing if insufficient data
@@ -56,6 +56,7 @@ def process_kpi_columns(data, kpi_columns):
             model.fit(X_scaled, y)
 
             # Generate predictions for the next 3 weeks
+            future_predictions = []
             current_last_date = last_date
 
             for i in range(3):
@@ -63,19 +64,16 @@ def process_kpi_columns(data, kpi_columns):
                 next_date_numeric = scaler.transform([[current_last_date.toordinal()]])[0][0]
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
-                # Append the prediction back to the same column
+                # Append prediction
+                future_predictions.append({'Date': current_last_date + pd.Timedelta(days=7), kpi_column: next_prediction})
+
+                # Update historical data with the predicted value
                 new_row = {
                     'Date': current_last_date + pd.Timedelta(days=7),
+                    'DateNumeric': (current_last_date + pd.Timedelta(days=7)).toordinal(),
                     kpi_column: next_prediction
                 }
-                final_data = pd.concat([final_data, pd.DataFrame([new_row])], ignore_index=True)
-
-                # Update historical data
-                kpi_data = pd.concat([kpi_data, pd.DataFrame([{
-                    'Date': new_row['Date'],
-                    'DateNumeric': new_row['Date'].toordinal(),
-                    kpi_column: next_prediction
-                }])], ignore_index=True)
+                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
 
                 # Retrain the model with updated data
                 X = kpi_data[['DateNumeric']]
@@ -86,6 +84,10 @@ def process_kpi_columns(data, kpi_columns):
                 # Update the date for the next iteration
                 current_last_date += pd.Timedelta(days=7)
 
+            # Add predictions to the final data
+            future_predictions_df = pd.DataFrame(future_predictions)
+            final_data = pd.merge(final_data, future_predictions_df, on="Date", how="outer")
+
     # Ensure the Date column is formatted correctly
     final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')
     return final_data
@@ -95,4 +97,4 @@ data = load_data(file_path, sheet_name)
 final_data = process_kpi_columns(data, kpi_columns)
 
 # Display the final result
-print(final_data.sort_values(by="Date"))
+display(final_data)
