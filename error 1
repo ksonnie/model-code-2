@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 
@@ -14,8 +14,6 @@ kpi_columns = [
     "OTA w/ Excluded Purchase Order (PO)",
     "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN",
     "Invalid LOA"
-
-    # Add more KPI columns as required
 ]
 
 # Load the Excel data
@@ -55,8 +53,8 @@ def process_kpi_columns(data, kpi_columns):
             # Scale the numeric data
             X_scaled = scaler.fit_transform(X)
 
-            # Initialize and train the Linear Regression model
-            model = LinearRegression()
+            # Initialize and train the Decision Tree model
+            model = DecisionTreeRegressor(random_state=42)
             model.fit(X_scaled, y)
 
             # Generate predictions for the next 3 weeks
@@ -97,6 +95,6 @@ def process_kpi_columns(data, kpi_columns):
 data = load_data(file_path, sheet_name)
 final_data = process_kpi_columns(data, kpi_columns)
 columns_to_keep = ["Date"] + kpi_columns + ["BSO"]
-final_data_pacflt_linear_regression = final_data[columns_to_keep]
+final_data_resfor_decision_tree = final_data[columns_to_keep]
 
-display(final_data_pacflt_linear_regression)
+display(final_data_resfor_decision_tree)
