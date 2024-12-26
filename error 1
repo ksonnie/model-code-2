@@ -26,16 +26,21 @@ def load_data(file_path, sheet_name):
 def process_kpi_columns(data, kpi_columns, bso_name):
     scaler = MinMaxScaler()
     last_date = data['Date'].max()  # Get the latest date in the data
+    print(f"Last date in the original data: {last_date}")
 
     # Add BSO column to the data
     data['BSO'] = bso_name
+
+    # Display the initial data
+    print("\nInitial Data:")
+    display(data)
 
     # Prepare a DataFrame to store the combined historical and predicted data
     final_data = data.copy()
 
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
-            print(f"Processing KPI: {kpi_column}")
+            print(f"\nProcessing KPI: {kpi_column}")
 
             # Prepare historical data for the current KPI
             kpi_data = data[['Date', kpi_column]].copy()
@@ -45,6 +50,10 @@ def process_kpi_columns(data, kpi_columns, bso_name):
             if len(kpi_data) < 2:
                 print(f"Skipping {kpi_column}: insufficient data.")
                 continue
+
+            # Display the historical data
+            print("\nHistorical Data Before Predictions:")
+            display(kpi_data)
 
             # Convert Date to numeric for modeling
             kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
@@ -85,8 +94,17 @@ def process_kpi_columns(data, kpi_columns, bso_name):
                 # Update the date for the next iteration
                 current_last_date = next_date
 
+            # Display the updated historical data after predictions
+            print("\nHistorical Data After Predictions:")
+            display(kpi_data)
+
     # Ensure the Date column is formatted correctly
     final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')
+    
+    # Display the final data
+    print("\nFinal Data With Predictions:")
+    display(final_data)
+    
     return final_data
 
 # Main execution
@@ -98,4 +116,5 @@ columns_to_keep = ["Date", "BSO"] + kpi_columns
 final_data_with_bso = final_data[columns_to_keep]
 
 # Display the final result
+print("\nFinal Dataframe With Selected Columns:")
 display(final_data_with_bso)
