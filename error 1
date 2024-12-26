@@ -1,72 +1,83 @@
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-5
-4
-4
-4
-4
-4
-4
-4
-5
-5
-5
-5
-6
-7
-7
+# BSO Name
+bso_name = "RESFOR"
+
+# List of KPI columns to process
+kpi_columns = ["Abnormal Accounts Payable (AAP)"]
+
+# Function to process all KPI columns and add predictions for each date
+def process_kpi_columns(data, kpi_columns, bso_name):
+    scaler = MinMaxScaler()
+    last_date = data['Date'].max()  # Get the latest date in the data
+
+    # Add BSO column to the data
+    data['BSO'] = bso_name
+
+    # Prepare a DataFrame to hold future predictions
+    future_dates = [last_date + pd.Timedelta(days=7 * i) for i in range(1, 4)]
+    predictions = pd.DataFrame({'Date': future_dates, 'BSO': bso_name})
+
+    for kpi_column in kpi_columns:
+        if kpi_column in data.columns:
+            print(f"Processing KPI: {kpi_column}")
+
+            # Prepare historical data for the current KPI
+            kpi_data = data[['Date', kpi_column]].copy()
+            kpi_data.dropna(subset=[kpi_column], inplace=True)  # Remove rows where KPI is NaN
+
+            # Skip processing if insufficient data
+            if len(kpi_data) < 2:
+                print(f"Skipping {kpi_column}: insufficient data.")
+                continue
+
+            # Convert Date to numeric for modeling
+            kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
+            X = kpi_data[['DateNumeric']]
+            y = kpi_data[kpi_column]
+
+            # Scale the numeric data
+            X_scaled = scaler.fit_transform(X)
+
+            # Initialize and train the Decision Tree model
+            model = DecisionTreeRegressor(random_state=42)
+            model.fit(X_scaled, y)
+
+            # Generate predictions for the next 3 weeks
+            future_predictions = []
+            current_last_date = last_date
+
+            for i in range(3):
+                # Prepare input for prediction
+                next_date = current_last_date + pd.Timedelta(days=7)
+                next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+                next_prediction = model.predict([[next_date_numeric]])[0]
+
+                # Append prediction
+                future_predictions.append(next_prediction)
+
+                # Update historical data with the predicted value
+                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
+
+                # Retrain the model with updated data
+                X = kpi_data[['DateNumeric']]
+                y = kpi_data[kpi_column]
+                X_scaled = scaler.fit_transform(X)
+                model.fit(X_scaled, y)
+
+                # Update the date for the next iteration
+                current_last_date = next_date
+
+            # Add predictions to the future dates DataFrame
+            predictions[kpi_column] = future_predictions
+
+    # Combine original data with the predictions
+    final_data = pd.concat([data, predictions], ignore_index=True)
+    final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
+    return final_data
+
+# Main execution
+final_data = process_kpi_columns(data, kpi_columns, bso_name)
+
+# Specify columns to keep
+columns_to_keep = ["Date", "BSO"] + kpi_columns
+final_data_with_bso = final_data[columns_to_keep]
