@@ -1,46 +1,18 @@
-import pandas as pd
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.preprocessing import MinMaxScaler
-import numpy as np
-
-# File path and relevant sheet name
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-sheet_name = "RESFOR Proj"
-
-# BSO Name
-bso_name = "RESFOR"
-
-# List of KPI columns to process
-kpi_columns = [
-    "Abnormal Accounts Payable (AAP)"
-]
-
-# Load the Excel data
-def load_data(file_path, sheet_name):
-    data = pd.read_excel(file_path, sheet_name=sheet_name)
-    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-    data.dropna(subset=['Date'], inplace=True)  # Drop rows with invalid dates
-    return data
-
-# Function to process all KPI columns and add predictions for each date
 def process_kpi_columns(data, kpi_columns, bso_name):
     scaler = MinMaxScaler()
     last_date = data['Date'].max()  # Get the latest date in the data
-    print(f"Last date in the original data: {last_date}")
+    print(f"Last historical date: {last_date}")
 
     # Add BSO column to the data
     data['BSO'] = bso_name
 
-    # Display the initial data
-    print("\nInitial Data:")
-    display(data)
-
-    # Prepare a DataFrame to store the combined historical and predicted data
-    final_data = data.copy()
+    # Prepare a DataFrame to hold future predictions
+    future_dates = [last_date + pd.Timedelta(days=7 * i) for i in range(1, 4)]
+    predictions = pd.DataFrame({'Date': future_dates, 'BSO': bso_name})
 
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
-            print(f"\nProcessing KPI: {kpi_column}")
+            print(f"Processing KPI: {kpi_column}")
 
             # Prepare historical data for the current KPI
             kpi_data = data[['Date', kpi_column]].copy()
@@ -50,10 +22,6 @@ def process_kpi_columns(data, kpi_columns, bso_name):
             if len(kpi_data) < 2:
                 print(f"Skipping {kpi_column}: insufficient data.")
                 continue
-
-            # Display the historical data
-            print("\nHistorical Data Before Predictions:")
-            display(kpi_data)
 
             # Convert Date to numeric for modeling
             kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
@@ -72,18 +40,17 @@ def process_kpi_columns(data, kpi_columns, bso_name):
             current_last_date = last_date
 
             for i in range(3):
-                # Predict for the next week
+                # Prepare input for prediction
                 next_date = current_last_date + pd.Timedelta(days=7)
                 next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
-                # Append the prediction as a new row
-                new_row = {'Date': next_date, kpi_column: next_prediction, 'BSO': bso_name}
-                final_data = pd.concat([final_data, pd.DataFrame([new_row])], ignore_index=True)
+                # Append prediction
+                future_predictions.append(next_prediction)
 
                 # Update historical data with the predicted value
-                new_row_for_model = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
-                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row_for_model])], ignore_index=True)
+                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
 
                 # Retrain the model with updated data
                 X = kpi_data[['DateNumeric']]
@@ -94,27 +61,10 @@ def process_kpi_columns(data, kpi_columns, bso_name):
                 # Update the date for the next iteration
                 current_last_date = next_date
 
-            # Display the updated historical data after predictions
-            print("\nHistorical Data After Predictions:")
-            display(kpi_data)
+            # Add predictions to the future dates DataFrame
+            predictions[kpi_column] = future_predictions
 
-    # Ensure the Date column is formatted correctly
-    final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')
-    
-    # Display the final data
-    print("\nFinal Data With Predictions:")
-    display(final_data)
-    
+    # Combine original data with the predictions
+    final_data = pd.concat([data, predictions], ignore_index=True)
+    final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
     return final_data
-
-# Main execution
-data = load_data(file_path, sheet_name)
-final_data = process_kpi_columns(data, kpi_columns, bso_name)
-
-# Specify columns to keep
-columns_to_keep = ["Date", "BSO"] + kpi_columns
-final_data_with_bso = final_data[columns_to_keep]
-
-# Display the final result
-print("\nFinal Dataframe With Selected Columns:")
-display(final_data_with_bso)
