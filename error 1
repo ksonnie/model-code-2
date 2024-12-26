@@ -30,9 +30,6 @@ def process_kpi_columns(data, kpi_columns, bso_name):
     # Add BSO column to the data
     data['BSO'] = bso_name
 
-    # Prepare a DataFrame to hold future predictions
-    future_dates = [last_date + pd.Timedelta(days=7 * i) for i in range(1, 4)]
-
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
             print(f"Processing KPI: {kpi_column}")
@@ -64,6 +61,8 @@ def process_kpi_columns(data, kpi_columns, bso_name):
                 # Prepare input for prediction
                 next_date = current_last_date + pd.Timedelta(days=7)
                 next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+
+                # Generate prediction
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
                 # Append prediction to historical data
