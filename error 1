@@ -30,7 +30,6 @@ def process_kpi_columns(data, kpi_columns, bso_name):
     # Add BSO column to the data
     data['BSO'] = bso_name
 
-    # Iterate over each KPI column to make predictions
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
             print(f"Processing KPI: {kpi_column}")
@@ -58,29 +57,28 @@ def process_kpi_columns(data, kpi_columns, bso_name):
 
             # Generate predictions for the next 3 weeks
             for i in range(3):
-                # Calculate the next prediction date
+                # Predict for the next week
                 next_date = last_date + pd.Timedelta(days=7)
                 next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
-                # Append prediction to the historical data
-                new_row = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                # Append the prediction to the historical data
+                new_row = {'Date': next_date, kpi_column: next_prediction, 'DateNumeric': next_date.toordinal()}
                 kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
 
-                # Retrain the model with updated data
+                # Update the model with the new data
                 X = kpi_data[['DateNumeric']]
                 y = kpi_data[kpi_column]
                 X_scaled = scaler.fit_transform(X)
                 model.fit(X_scaled, y)
 
-                # Add the prediction to the main data
-                data = pd.concat([data, pd.DataFrame({'Date': [next_date], kpi_column: [next_prediction], 'BSO': [bso_name]})], ignore_index=True)
-
-                # Update the last_date for the next prediction
+                # Update the last date for the next prediction
                 last_date = next_date
 
-    # Format the Date column as mm/dd/yyyy
-    data['Date'] = pd.to_datetime(data['Date']).dt.strftime('%m/%d/%Y')
+            # Update the main data with predictions
+            kpi_data['Date'] = pd.to_datetime(kpi_data['Date']).dt.strftime('%m/%d/%Y')
+            data = pd.merge(data, kpi_data[['Date', kpi_column]], on='Date', how='outer')
+
     return data
 
 # Main execution
