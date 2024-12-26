@@ -30,6 +30,9 @@ def process_kpi_columns(data, kpi_columns, bso_name):
     # Add BSO column to the data
     data['BSO'] = bso_name
 
+    # Prepare a DataFrame to store the combined historical and predicted data
+    final_data = data.copy()
+
     for kpi_column in kpi_columns:
         if kpi_column in data.columns:
             print(f"Processing KPI: {kpi_column}")
@@ -56,30 +59,35 @@ def process_kpi_columns(data, kpi_columns, bso_name):
             model.fit(X_scaled, y)
 
             # Generate predictions for the next 3 weeks
+            future_predictions = []
+            current_last_date = last_date
+
             for i in range(3):
                 # Predict for the next week
-                next_date = last_date + pd.Timedelta(days=7)
+                next_date = current_last_date + pd.Timedelta(days=7)
                 next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
                 next_prediction = model.predict([[next_date_numeric]])[0]
 
-                # Append the prediction to the historical data
-                new_row = {'Date': next_date, kpi_column: next_prediction, 'DateNumeric': next_date.toordinal()}
-                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
+                # Append the prediction as a new row
+                new_row = {'Date': next_date, kpi_column: next_prediction, 'BSO': bso_name}
+                final_data = pd.concat([final_data, pd.DataFrame([new_row])], ignore_index=True)
 
-                # Update the model with the new data
+                # Update historical data with the predicted value
+                new_row_for_model = {'Date': next_date, 'DateNumeric': next_date.toordinal(), kpi_column: next_prediction}
+                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row_for_model])], ignore_index=True)
+
+                # Retrain the model with updated data
                 X = kpi_data[['DateNumeric']]
                 y = kpi_data[kpi_column]
                 X_scaled = scaler.fit_transform(X)
                 model.fit(X_scaled, y)
 
-                # Update the last date for the next prediction
-                last_date = next_date
+                # Update the date for the next iteration
+                current_last_date = next_date
 
-            # Update the main data with predictions
-            kpi_data['Date'] = pd.to_datetime(kpi_data['Date']).dt.strftime('%m/%d/%Y')
-            data = pd.merge(data, kpi_data[['Date', kpi_column]], on='Date', how='outer')
-
-    return data
+    # Ensure the Date column is formatted correctly
+    final_data['Date'] = pd.to_datetime(final_data['Date']).dt.strftime('%m/%d/%Y')
+    return final_data
 
 # Main execution
 data = load_data(file_path, sheet_name)
