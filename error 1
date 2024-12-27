@@ -1,89 +1,49 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-
-# File path and sheet names
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-bso_sheets = {
-    "USFFC": "FFC Proj",
-    "RESFOR": "RESFOR Proj",
-    "PACFLT": "PACFLT Proj"
-}
-
-# Specify the KPI columns to plot
-kpi_columns = [
-    'NULOs that Remain High Priority',
-    'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)',
-    'RBC Level- Total Negative Billed',
-    'RBC Level- Total Negative Authorizations',
-    'RON Level- Total Negative Reimbursable Collected',
-    'Negative Liquidations - Travel (DTC: CS, CT, TO)',
-    'Permanent Journal Vouchers',
-    'OTA w/ Closed RON',
-    'Negative Liquidations - Other',
-    'OTA w/ Excluded Purchase Order (PO)',
-    'Negative Liquidations - Foreign Currency',
-    'Cost Transfer Allocation - "COE"',
-    'ZMIL Negative Quantity / Positive Liquidation Amounts',
-    'Cost Transfer Allocation - "L"',
-    'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN',
-    'Invalid LOA'
-]
-
-# Function to load and preprocess data for a BSO
-def load_data(file_path, sheet_name):
-    data = pd.read_excel(file_path, sheet_name=sheet_name)
-    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-    data = data.dropna(subset=['Date'])  # Drop rows with invalid dates
-    return data
-
-# Function to calculate R-squared values and plot KPIs
-def calculate_r2_and_plot_kpis(file_path, bso_sheets, kpi_columns):
-    r2_table = []
-    
-    for bso, sheet_name in bso_sheets.items():
-        # Load data for the current BSO
-        data = load_data(file_path, sheet_name)
-        
-        # Check if KPI columns exist in the data
-        existing_kpis = [col for col in kpi_columns if col in data.columns]
-        if not existing_kpis:
-            print(f"No specified KPI columns found for BSO: {bso}")
-            continue
-        
-        # Plot the KPIs
-        plt.figure(figsize=(12, 6))
-        for kpi in existing_kpis:
-            plt.plot(data['Date'], data[kpi], label=kpi)
-            
-            # Calculate R-squared for the KPI
-            if len(data) > 1:
-                data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
-                X = data[['DateNumeric']]
-                y = data[kpi]
-                
-                model = LinearRegression()
-                model.fit(X, y)
-                y_pred = model.predict(X)
-                
-                r2 = r2_score(y, y_pred)
-                r2_table.append({"BSO": bso, "KPI": kpi, "R-squared": round(r2, 4)})
-        
-        # Add titles and labels
-        plt.title(f"KPIs Over Time for BSO: {bso}", fontsize=14)
-        plt.xlabel("Date", fontsize=12)
-        plt.ylabel("KPI Values", fontsize=12)
-        plt.legend(loc="upper left")
-        plt.grid(True)
-        
-        # Show the plot
-        plt.tight_layout()
-        plt.show()
-    
-    # Return the R-squared table
-    return pd.DataFrame(r2_table)
-
-# Call the function and display R-squared values
-r2_results = calculate_r2_and_plot_kpis(file_path, bso_sheets, kpi_columns)
-print(r2_results)
+       BSO                                                KPI  R-squared
+0    USFFC                    NULOs that Remain High Priority     0.4466
+1    USFFC  Billing exceeds Authorization (Abnormal Unfill...     0.1005
+2    USFFC                   RBC Level- Total Negative Billed     0.0183
+3    USFFC           RBC Level- Total Negative Authorizations     0.6124
+4    USFFC   RON Level- Total Negative Reimbursable Collected     0.0180
+5    USFFC   Negative Liquidations - Travel (DTC: CS, CT, TO)     0.3957
+6    USFFC                         Permanent Journal Vouchers     1.0000
+7    USFFC                                  OTA w/ Closed RON     1.0000
+8    USFFC                      Negative Liquidations - Other     0.4448
+9    USFFC                OTA w/ Excluded Purchase Order (PO)     1.0000
+10   USFFC           Negative Liquidations - Foreign Currency     0.7984
+11   USFFC                   Cost Transfer Allocation - "COE"     0.6805
+12   USFFC  ZMIL Negative Quantity / Positive Liquidation ...     0.0051
+13   USFFC                     Cost Transfer Allocation - "L"     0.6809
+14   USFFC         Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN     1.0000
+15   USFFC                                        Invalid LOA     1.0000
+16  RESFOR                    NULOs that Remain High Priority     0.1759
+17  RESFOR  Billing exceeds Authorization (Abnormal Unfill...     0.5135
+18  RESFOR                   RBC Level- Total Negative Billed     1.0000
+19  RESFOR           RBC Level- Total Negative Authorizations     1.0000
+20  RESFOR   RON Level- Total Negative Reimbursable Collected     1.0000
+21  RESFOR   Negative Liquidations - Travel (DTC: CS, CT, TO)     0.5727
+22  RESFOR                         Permanent Journal Vouchers     1.0000
+23  RESFOR                                  OTA w/ Closed RON     1.0000
+24  RESFOR                      Negative Liquidations - Other     0.3936
+25  RESFOR                OTA w/ Excluded Purchase Order (PO)     1.0000
+26  RESFOR           Negative Liquidations - Foreign Currency     1.0000
+27  RESFOR                   Cost Transfer Allocation - "COE"     1.0000
+28  RESFOR  ZMIL Negative Quantity / Positive Liquidation ...     0.2828
+29  RESFOR                     Cost Transfer Allocation - "L"     1.0000
+30  RESFOR         Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN     1.0000
+31  RESFOR                                        Invalid LOA     1.0000
+32  PACFLT                    NULOs that Remain High Priority     0.0417
+33  PACFLT  Billing exceeds Authorization (Abnormal Unfill...     0.3873
+34  PACFLT                   RBC Level- Total Negative Billed     0.2367
+35  PACFLT           RBC Level- Total Negative Authorizations     0.2473
+36  PACFLT   RON Level- Total Negative Reimbursable Collected     0.2264
+37  PACFLT   Negative Liquidations - Travel (DTC: CS, CT, TO)     0.2901
+38  PACFLT                         Permanent Journal Vouchers     1.0000
+39  PACFLT                                  OTA w/ Closed RON     1.0000
+40  PACFLT                      Negative Liquidations - Other     0.6271
+41  PACFLT                OTA w/ Excluded Purchase Order (PO)     1.0000
+42  PACFLT           Negative Liquidations - Foreign Currency     0.1524
+43  PACFLT                   Cost Transfer Allocation - "COE"     0.0396
+44  PACFLT  ZMIL Negative Quantity / Positive Liquidation ...     0.5456
+45  PACFLT                     Cost Transfer Allocation - "L"     0.0042
+46  PACFLT         Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN     1.0000
+47  PACFLT                                        Invalid LOA     1.0000
