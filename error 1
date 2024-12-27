@@ -1,5 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
 
 # File path and sheet names
 file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
@@ -36,8 +38,10 @@ def load_data(file_path, sheet_name):
     data = data.dropna(subset=['Date'])  # Drop rows with invalid dates
     return data
 
-# Function to plot KPIs for each BSO
-def plot_kpis_for_bsos(file_path, bso_sheets, kpi_columns):
+# Function to calculate R-squared values and plot KPIs
+def calculate_r2_and_plot_kpis(file_path, bso_sheets, kpi_columns):
+    r2_table = []
+    
     for bso, sheet_name in bso_sheets.items():
         # Load data for the current BSO
         data = load_data(file_path, sheet_name)
@@ -52,6 +56,19 @@ def plot_kpis_for_bsos(file_path, bso_sheets, kpi_columns):
         plt.figure(figsize=(12, 6))
         for kpi in existing_kpis:
             plt.plot(data['Date'], data[kpi], label=kpi)
+            
+            # Calculate R-squared for the KPI
+            if len(data) > 1:
+                data['DateNumeric'] = data['Date'].map(pd.Timestamp.toordinal)
+                X = data[['DateNumeric']]
+                y = data[kpi]
+                
+                model = LinearRegression()
+                model.fit(X, y)
+                y_pred = model.predict(X)
+                
+                r2 = r2_score(y, y_pred)
+                r2_table.append({"BSO": bso, "KPI": kpi, "R-squared": round(r2, 4)})
         
         # Add titles and labels
         plt.title(f"KPIs Over Time for BSO: {bso}", fontsize=14)
@@ -63,6 +80,10 @@ def plot_kpis_for_bsos(file_path, bso_sheets, kpi_columns):
         # Show the plot
         plt.tight_layout()
         plt.show()
+    
+    # Return the R-squared table
+    return pd.DataFrame(r2_table)
 
-# Call the function to plot KPIs for all BSOs
-plot_kpis_for_bsos(file_path, bso_sheets, kpi_columns)
+# Call the function and display R-squared values
+r2_results = calculate_r2_and_plot_kpis(file_path, bso_sheets, kpi_columns)
+print(r2_results)
