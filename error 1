@@ -1,51 +1,107 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
+from sklearn.preprocessing import MinMaxScaler
 
-BSO	KPI	R-squared	Best Model	Why
-USFFC	NULOs that Remain High Priority	0.4466	Random Forest	Moderate non-linear patterns suggest a tree-based approach.
-USFFC	Billing exceeds Authorization (Abnormal Unfilled Customer Orders)	0.1005	Decision Tree	Very low linear fit, decision trees handle irregular patterns better.
-USFFC	RBC Level- Total Negative Billed	0.0183	XGBoost	Extremely low fit, XGBoost is robust for sparse or complex data.
-USFFC	RBC Level- Total Negative Authorizations	0.6124	Linear Regression	Moderate linear trend, suitable for linear regression.
-USFFC	RON Level- Total Negative Reimbursable Collected	0.0180	XGBoost	Extremely low fit, XGBoost is suitable for irregular data.
-USFFC	Negative Liquidations - Travel (DTC: CS, CT, TO)	0.3957	Random Forest	Non-linear patterns, Random Forest is appropriate.
-USFFC	Permanent Journal Vouchers	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-USFFC	OTA w/ Closed RON	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-USFFC	Negative Liquidations - Other	0.4448	Random Forest	Moderate non-linear trends.
-USFFC	OTA w/ Excluded Purchase Order (PO)	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-USFFC	Negative Liquidations - Foreign Currency	0.7984	Linear Regression	Strong linear relationship.
-USFFC	Cost Transfer Allocation - “COE”	0.6805	Linear Regression	Strong linear relationship.
-USFFC	ZMIL Negative Quantity / Positive Liquidation Amounts	0.0051	XGBoost	Poor linear fit, requires advanced tree-based models.
-USFFC	Cost Transfer Allocation - “L”	0.6809	Linear Regression	Strong linear relationship.
-USFFC	Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-USFFC	Invalid LOA	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	NULOs that Remain High Priority	0.1759	Decision Tree	Low linear fit, decision trees are better for non-linear data.
-RESFOR	Billing exceeds Authorization (Abnormal Unfilled Customer Orders)	0.5135	Random Forest	Moderate non-linear patterns suggest tree-based models.
-RESFOR	RBC Level- Total Negative Billed	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	RBC Level- Total Negative Authorizations	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	RON Level- Total Negative Reimbursable Collected	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	Negative Liquidations - Travel (DTC: CS, CT, TO)	0.5727	Random Forest	Moderate non-linear patterns.
-RESFOR	Permanent Journal Vouchers	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	OTA w/ Closed RON	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	Negative Liquidations - Other	0.3936	Random Forest	Moderate non-linear patterns.
-RESFOR	OTA w/ Excluded Purchase Order (PO)	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	Negative Liquidations - Foreign Currency	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	Cost Transfer Allocation - “COE”	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	ZMIL Negative Quantity / Positive Liquidation Amounts	0.2828	Decision Tree	Low linear fit, decision trees are better for non-linear data.
-RESFOR	Cost Transfer Allocation - “L”	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-RESFOR	Invalid LOA	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-PACFLT	NULOs that Remain High Priority	0.0417	XGBoost	Poor linear fit, requires advanced tree-based models.
-PACFLT	Billing exceeds Authorization (Abnormal Unfilled Customer Orders)	0.3873	Random Forest	Moderate non-linear patterns.
-PACFLT	RBC Level- Total Negative Billed	0.2367	Decision Tree	Low linear fit, suitable for decision trees.
-PACFLT	RBC Level- Total Negative Authorizations	0.2473	Decision Tree	Low linear fit, suitable for decision trees.
-PACFLT	RON Level- Total Negative Reimbursable Collected	0.2264	Decision Tree	Low linear fit, suitable for decision trees.
-PACFLT	Negative Liquidations - Travel (DTC: CS, CT, TO)	0.2901	Decision Tree	Low linear fit, suitable for decision trees.
-PACFLT	Permanent Journal Vouchers	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-PACFLT	OTA w/ Closed RON	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-PACFLT	Negative Liquidations - Other	0.6271	Random Forest	Moderate non-linear patterns.
-PACFLT	OTA w/ Excluded Purchase Order (PO)	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-PACFLT	Negative Liquidations - Foreign Currency	0.1524	Decision Tree	Low linear fit, suitable for decision trees.
-PACFLT	Cost Transfer Allocation - “COE”	0.0396	XGBoost	Poor linear fit, requires advanced tree-based models.
-PACFLT	ZMIL Negative Quantity / Positive Liquidation Amounts	0.5456	Random Forest	Moderate non-linear patterns.
-PACFLT	Cost Transfer Allocation - “L”	0.0042	XGBoost	Poor linear fit, requires advanced tree-based models.
-PACFLT	Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
-PACFLT	Invalid LOA	1.0000	Linear Regression	Perfect linear fit, linear regression is ideal.
+# File path and sheet names
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
 
+bso_sheets = {
+    "USFFC": "FFC Proj",
+    "RESFOR": "RESFOR Proj",
+    "PACFLT": "PACFLT Proj"
+}
+
+# Prediction details based on R-squared table
+prediction_details = [
+    {"BSO": "USFFC", "KPI": "NULOs that Remain High Priority", "Model": "Random Forest"},
+    {"BSO": "USFFC", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Decision Tree"},
+    # Add all rows from the R-squared table
+]
+
+# Function to load data
+def load_data(file_path, sheet_name):
+    data = pd.read_excel(file_path, sheet_name=sheet_name)
+    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+    data.dropna(subset=['Date'], inplace=True)
+    return data
+
+# Function to process and predict for each KPI
+def process_kpi_predictions(data, kpi, model_name):
+    scaler = MinMaxScaler()
+    last_date = data['Date'].max()
+    kpi_data = data[['Date', kpi]].dropna()
+
+    if kpi_data.empty:
+        print(f"No data available for KPI: {kpi}")
+        return None
+
+    kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
+    X = kpi_data[['DateNumeric']]
+    y = kpi_data[kpi]
+    X_scaled = scaler.fit_transform(X)
+
+    # Initialize the model
+    if model_name == "Linear Regression":
+        model = LinearRegression()
+    elif model_name == "Decision Tree":
+        model = DecisionTreeRegressor(random_state=42)
+    elif model_name == "Random Forest":
+        model = RandomForestRegressor(random_state=42)
+    elif model_name == "XGBoost":
+        model = XGBRegressor(random_state=42)
+    else:
+        print(f"Unknown model: {model_name}")
+        return None
+
+    # Train the model
+    model.fit(X_scaled, y)
+
+    # Generate predictions for the next 3 weeks
+    predictions = []
+    for i in range(1, 4):
+        next_date = last_date + pd.Timedelta(days=7 * i)
+        next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+        prediction = model.predict([[next_date_numeric]])[0]
+        predictions.append({'Date': next_date, kpi: prediction})
+
+        # Update the historical data with the new prediction
+        kpi_data = pd.concat([
+            kpi_data,
+            pd.DataFrame({'Date': [next_date], 'DateNumeric': [next_date.toordinal()], kpi: [prediction]})
+        ])
+        X = kpi_data[['DateNumeric']]
+        y = kpi_data[kpi]
+        X_scaled = scaler.fit_transform(X)
+        model.fit(X_scaled, y)
+
+    return predictions
+
+# Main execution
+final_results = {}
+for bso, sheet_name in bso_sheets.items():
+    print(f"Processing BSO: {bso}")
+    data = load_data(file_path, sheet_name)
+
+    bso_predictions = []
+    for detail in prediction_details:
+        if detail['BSO'] == bso and detail['KPI'] in data.columns:
+            print(f"Processing KPI: {detail['KPI']} with model {detail['Model']}")
+            kpi_predictions = process_kpi_predictions(data, detail['KPI'], detail['Model'])
+            if kpi_predictions:
+                bso_predictions.extend(kpi_predictions)
+
+    # Convert to DataFrame
+    bso_predictions_df = pd.DataFrame(bso_predictions)
+    bso_predictions_df['BSO'] = bso
+    final_results[bso] = bso_predictions_df
+
+# Combine results for all BSOs
+combined_results = pd.concat(final_results.values(), ignore_index=True)
+combined_results['Date'] = combined_results['Date'].dt.strftime('%m/%d/%Y')  # Format the Date column
+
+# Display final results
+print(combined_results)
