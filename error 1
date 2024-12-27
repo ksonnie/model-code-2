@@ -1,10 +1,63 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
+from sklearn.preprocessing import MinMaxScaler
+
+# Prediction details based on R-squared table
 prediction_details = [
     {"BSO": "USFFC", "KPI": "NULOs that Remain High Priority", "Model": "Random Forest"},
     {"BSO": "USFFC", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Decision Tree"},
     {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Billed", "Model": "XGBoost"},
     {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "XGBoost"},
+    {"BSO": "USFFC", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Random Forest"},
+    {"BSO": "USFFC", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
+    {"BSO": "USFFC", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "Cost Transfer Allocation - “COE”", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "XGBoost"},
+    {"BSO": "USFFC", "KPI": "Cost Transfer Allocation - “L”", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
+    {"BSO": "USFFC", "KPI": "Invalid LOA", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "NULOs that Remain High Priority", "Model": "Decision Tree"},
+    {"BSO": "RESFOR", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Random Forest"},
+    {"BSO": "RESFOR", "KPI": "RBC Level- Total Negative Billed", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "Linear Regression"},
     {"BSO": "RESFOR", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Random Forest"},
     {"BSO": "RESFOR", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "Cost Transfer Allocation - \"L\"", "Model": "XGBoost"},
-    # Add all other entries as needed...
+    {"BSO": "RESFOR", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
+    {"BSO": "RESFOR", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "Cost Transfer Allocation - “COE”", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "Decision Tree"},
+    {"BSO": "RESFOR", "KPI": "Cost Transfer Allocation - “L”", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
+    {"BSO": "RESFOR", "KPI": "Invalid LOA", "Model": "Linear Regression"},
+    {"BSO": "PACFLT", "KPI": "NULOs that Remain High Priority", "Model": "XGBoost"},
+    {"BSO": "PACFLT", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Random Forest"},
+    {"BSO": "PACFLT", "KPI": "RBC Level- Total Negative Billed", "Model": "Decision Tree"},
+    {"BSO": "PACFLT", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Decision Tree"},
+    {"BSO": "PACFLT", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "Decision Tree"},
+    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Decision Tree"},
+    {"BSO": "PACFLT", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
+    {"BSO": "PACFLT", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
+    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
+    {"BSO": "PACFLT", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
+    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Decision Tree"},
+    {"BSO": "PACFLT", "KPI": "Cost Transfer Allocation - “COE”", "Model": "XGBoost"},
+    {"BSO": "PACFLT", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "Random Forest"},
+    {"BSO": "PACFLT", "KPI": "Cost Transfer Allocation - “L”", "Model": "XGBoost"},
+    {"BSO": "PACFLT", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
+    {"BSO": "PACFLT", "KPI": "Invalid LOA", "Model": "Linear Regression"}
 ]
+
+# Include this list in the earlier provided prediction code for implementation.
+
+# The remaining implementation remains the same as the code provided above.
