@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # File path and sheet names
-file_path = "/path_to_your_file/All BSOs Dashboards.xlsx"
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
 bso_sheets = {
     "USFFC": "FFC Proj",
     "RESFOR": "RESFOR Proj",
@@ -11,10 +11,22 @@ bso_sheets = {
 
 # Specify the KPI columns to plot
 kpi_columns = [
-    "NULOs that Remain High Priority",
-    "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)",
-    "RBC Level- Total Negative Billed",
-    "RBC Level- Total Negative Authorizations"
+    'NULOs that Remain High Priority',
+    'Billing exceeds Authorization (Abnormal Unfilled Customer Orders)',
+    'RBC Level- Total Negative Billed',
+    'RBC Level- Total Negative Authorizations',
+    'RON Level- Total Negative Reimbursable Collected',
+    'Negative Liquidations - Travel (DTC: CS, CT, TO)',
+    'Permanent Journal Vouchers',
+    'OTA w/ Closed RON',
+    'Negative Liquidations - Other',
+    'OTA w/ Excluded Purchase Order (PO)',
+    'Negative Liquidations - Foreign Currency',
+    'Cost Transfer Allocation - "COE"',
+    'ZMIL Negative Quantity / Positive Liquidation Amounts',
+    'Cost Transfer Allocation - "L"',
+    'Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN',
+    'Invalid LOA'
 ]
 
 # Function to load and preprocess data for a BSO
