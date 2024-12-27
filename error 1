@@ -19,7 +19,9 @@ bso_sheets = {
 prediction_details = [
     {"BSO": "USFFC", "KPI": "NULOs that Remain High Priority", "Model": "Random Forest"},
     {"BSO": "USFFC", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Decision Tree"},
-    # Add all rows from the R-squared table
+    {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Billed", "Model": "XGBoost"},
+    {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Linear Regression"},
+    # Add other KPIs and BSOs...
 ]
 
 # Function to load data
@@ -29,79 +31,82 @@ def load_data(file_path, sheet_name):
     data.dropna(subset=['Date'], inplace=True)
     return data
 
-# Function to process and predict for each KPI
-def process_kpi_predictions(data, kpi, model_name):
+# Function to process predictions for each KPI and merge them into one row per date
+def process_predictions(data, kpi_details):
     scaler = MinMaxScaler()
     last_date = data['Date'].max()
-    kpi_data = data[['Date', kpi]].dropna()
+    future_dates = [last_date + pd.Timedelta(days=7 * i) for i in range(1, 4)]
+    prediction_results = pd.DataFrame({'Date': future_dates})
 
-    if kpi_data.empty:
-        print(f"No data available for KPI: {kpi}")
-        return None
+    for detail in kpi_details:
+        kpi = detail["KPI"]
+        model_name = detail["Model"]
 
-    kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
-    X = kpi_data[['DateNumeric']]
-    y = kpi_data[kpi]
-    X_scaled = scaler.fit_transform(X)
+        if kpi not in data.columns:
+            continue
 
-    # Initialize the model
-    if model_name == "Linear Regression":
-        model = LinearRegression()
-    elif model_name == "Decision Tree":
-        model = DecisionTreeRegressor(random_state=42)
-    elif model_name == "Random Forest":
-        model = RandomForestRegressor(random_state=42)
-    elif model_name == "XGBoost":
-        model = XGBRegressor(random_state=42)
-    else:
-        print(f"Unknown model: {model_name}")
-        return None
+        # Prepare historical data
+        kpi_data = data[['Date', kpi]].dropna()
+        if kpi_data.empty:
+            continue
 
-    # Train the model
-    model.fit(X_scaled, y)
-
-    # Generate predictions for the next 3 weeks
-    predictions = []
-    for i in range(1, 4):
-        next_date = last_date + pd.Timedelta(days=7 * i)
-        next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
-        prediction = model.predict([[next_date_numeric]])[0]
-        predictions.append({'Date': next_date, kpi: prediction})
-
-        # Update the historical data with the new prediction
-        kpi_data = pd.concat([
-            kpi_data,
-            pd.DataFrame({'Date': [next_date], 'DateNumeric': [next_date.toordinal()], kpi: [prediction]})
-        ])
+        kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
         X = kpi_data[['DateNumeric']]
         y = kpi_data[kpi]
         X_scaled = scaler.fit_transform(X)
+
+        # Initialize the model
+        if model_name == "Linear Regression":
+            model = LinearRegression()
+        elif model_name == "Decision Tree":
+            model = DecisionTreeRegressor(random_state=42)
+        elif model_name == "Random Forest":
+            model = RandomForestRegressor(random_state=42)
+        elif model_name == "XGBoost":
+            model = XGBRegressor(random_state=42)
+        else:
+            continue
+
+        # Train the model
         model.fit(X_scaled, y)
 
-    return predictions
+        # Generate predictions
+        predictions = []
+        current_last_date = last_date
+        for _ in range(3):
+            next_date_numeric = scaler.transform([[current_last_date.toordinal()]])[0][0]
+            prediction = model.predict([[next_date_numeric]])[0]
+            predictions.append(prediction)
+
+            # Update historical data
+            new_row = {'Date': current_last_date, 'DateNumeric': current_last_date.toordinal(), kpi: prediction}
+            kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
+            X = kpi_data[['DateNumeric']]
+            y = kpi_data[kpi]
+            X_scaled = scaler.fit_transform(X)
+            model.fit(X_scaled, y)
+
+            # Increment the date
+            current_last_date += pd.Timedelta(days=7)
+
+        # Add predictions to the result
+        prediction_results[kpi] = predictions
+
+    return prediction_results
 
 # Main execution
 final_results = {}
 for bso, sheet_name in bso_sheets.items():
     print(f"Processing BSO: {bso}")
     data = load_data(file_path, sheet_name)
-
-    bso_predictions = []
-    for detail in prediction_details:
-        if detail['BSO'] == bso and detail['KPI'] in data.columns:
-            print(f"Processing KPI: {detail['KPI']} with model {detail['Model']}")
-            kpi_predictions = process_kpi_predictions(data, detail['KPI'], detail['Model'])
-            if kpi_predictions:
-                bso_predictions.extend(kpi_predictions)
-
-    # Convert to DataFrame
-    bso_predictions_df = pd.DataFrame(bso_predictions)
-    bso_predictions_df['BSO'] = bso
-    final_results[bso] = bso_predictions_df
+    bso_details = [detail for detail in prediction_details if detail["BSO"] == bso]
+    predictions = process_predictions(data, bso_details)
+    predictions["BSO"] = bso
+    final_results[bso] = predictions
 
 # Combine results for all BSOs
 combined_results = pd.concat(final_results.values(), ignore_index=True)
-combined_results['Date'] = combined_results['Date'].dt.strftime('%m/%d/%Y')  # Format the Date column
+combined_results['Date'] = combined_results['Date'].dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
 
-# Display final results
+# Display the final result
 print(combined_results)
