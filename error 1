@@ -18,58 +18,12 @@ bso_sheets = {
 }
 
 # Prediction details based on R-squared table
-# Prediction details based on R-squared table
 prediction_details = [
     {"BSO": "USFFC", "KPI": "NULOs that Remain High Priority", "Model": "Random Forest"},
     {"BSO": "USFFC", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Decision Tree"},
     {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Billed", "Model": "XGBoost"},
-    {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "XGBoost"},
-    {"BSO": "USFFC", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Random Forest"},
-    {"BSO": "USFFC", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
-    {"BSO": "USFFC", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Cost Transfer Allocation - “COE”", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "XGBoost"},
-    {"BSO": "USFFC", "KPI": "Cost Transfer Allocation - “L”", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Invalid LOA", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "NULOs that Remain High Priority", "Model": "Decision Tree"},
-    {"BSO": "RESFOR", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Random Forest"},
-    {"BSO": "RESFOR", "KPI": "RBC Level- Total Negative Billed", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Random Forest"},
-    {"BSO": "RESFOR", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
-    {"BSO": "RESFOR", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Cost Transfer Allocation - “COE”", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "Decision Tree"},
-    {"BSO": "RESFOR", "KPI": "Cost Transfer Allocation - “L”", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Invalid LOA", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "NULOs that Remain High Priority", "Model": "XGBoost"},
-    {"BSO": "PACFLT", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Random Forest"},
-    {"BSO": "PACFLT", "KPI": "RBC Level- Total Negative Billed", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
-    {"BSO": "PACFLT", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "Cost Transfer Allocation - “COE”", "Model": "XGBoost"},
-    {"BSO": "PACFLT", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "Random Forest"},
-    {"BSO": "PACFLT", "KPI": "Cost Transfer Allocation - “L”", "Model": "XGBoost"},
-    {"BSO": "PACFLT", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "Invalid LOA", "Model": "Linear Regression"}
+    # Add other KPI details
 ]
-
 
 # Function to load data
 def load_data(file_path, sheet_name):
@@ -78,7 +32,7 @@ def load_data(file_path, sheet_name):
     data.dropna(subset=['Date'], inplace=True)
     return data
 
-# Function to process predictions for each KPI and merge them into one row per date
+# Function to process predictions
 def process_predictions(data, kpi_details):
     scaler = MinMaxScaler()
     last_date = data['Date'].max()
@@ -123,6 +77,8 @@ def process_predictions(data, kpi_details):
         for _ in range(3):
             next_date_numeric = scaler.transform([[current_last_date.toordinal()]])[0][0]
             prediction = model.predict([[next_date_numeric]])[0]
+            # Ensure no negative predictions
+            prediction = max(0, prediction)
             predictions.append(prediction)
 
             # Update historical data
@@ -153,7 +109,7 @@ for bso, sheet_name in bso_sheets.items():
 
 # Combine results for all BSOs
 combined_results = pd.concat(final_results.values(), ignore_index=True)
-combined_results['Date'] = combined_results['Date'].dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
+combined_results['Date'] = pd.to_datetime(combined_results['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
 
 # Display the final result
-print(combined_results)
+import ace_tools as tools; tools.display_dataframe_to_user(name="Predicted KPI Values", dataframe=combined_results)
