@@ -1,63 +1,133 @@
 import pandas as pd
-import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LinearRegression
 from xgboost import XGBRegressor
 from sklearn.preprocessing import MinMaxScaler
+import numpy as np
 
-# Prediction details based on R-squared table
-prediction_details = [
-    {"BSO": "USFFC", "KPI": "NULOs that Remain High Priority", "Model": "Random Forest"},
-    {"BSO": "USFFC", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Decision Tree"},
-    {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Billed", "Model": "XGBoost"},
-    {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "XGBoost"},
-    {"BSO": "USFFC", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Random Forest"},
-    {"BSO": "USFFC", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
-    {"BSO": "USFFC", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Cost Transfer Allocation - “COE”", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "XGBoost"},
-    {"BSO": "USFFC", "KPI": "Cost Transfer Allocation - “L”", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
-    {"BSO": "USFFC", "KPI": "Invalid LOA", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "NULOs that Remain High Priority", "Model": "Decision Tree"},
-    {"BSO": "RESFOR", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Random Forest"},
-    {"BSO": "RESFOR", "KPI": "RBC Level- Total Negative Billed", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Random Forest"},
-    {"BSO": "RESFOR", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
-    {"BSO": "RESFOR", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Cost Transfer Allocation - “COE”", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "Decision Tree"},
-    {"BSO": "RESFOR", "KPI": "Cost Transfer Allocation - “L”", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
-    {"BSO": "RESFOR", "KPI": "Invalid LOA", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "NULOs that Remain High Priority", "Model": "XGBoost"},
-    {"BSO": "PACFLT", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Random Forest"},
-    {"BSO": "PACFLT", "KPI": "RBC Level- Total Negative Billed", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "RBC Level- Total Negative Authorizations", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "RON Level- Total Negative Reimbursable Collected", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Travel (DTC: CS, CT, TO)", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "Permanent Journal Vouchers", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "OTA w/ Closed RON", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Other", "Model": "Random Forest"},
-    {"BSO": "PACFLT", "KPI": "OTA w/ Excluded Purchase Order (PO)", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "Negative Liquidations - Foreign Currency", "Model": "Decision Tree"},
-    {"BSO": "PACFLT", "KPI": "Cost Transfer Allocation - “COE”", "Model": "XGBoost"},
-    {"BSO": "PACFLT", "KPI": "ZMIL Negative Quantity / Positive Liquidation Amounts", "Model": "Random Forest"},
-    {"BSO": "PACFLT", "KPI": "Cost Transfer Allocation - “L”", "Model": "XGBoost"},
-    {"BSO": "PACFLT", "KPI": "Non-Labor Duplicates on SDN/ACRN/CLIN/SLIN", "Model": "Linear Regression"},
-    {"BSO": "PACFLT", "KPI": "Invalid LOA", "Model": "Linear Regression"}
-]
+# File path and relevant sheet name
+file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+bso_sheets = {
+    "USFFC": "FFC Proj",
+    "RESFOR": "RESFOR Proj",
+    "PACFLT": "PACFLT Proj"
+}
 
-# Include this list in the earlier provided prediction code for implementation.
+# Table with the best model for each KPI
+kpi_model_mapping = {
+    "USFFC": {
+        "NULOs that Remain High Priority": "Random Forest",
+        "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)": "Decision Tree",
+        "RBC Level- Total Negative Billed": "XGBoost",
+        "RBC Level- Total Negative Authorizations": "Linear Regression",
+        # Add other KPIs and their models for USFFC
+    },
+    "RESFOR": {
+        "NULOs that Remain High Priority": "Decision Tree",
+        "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)": "Random Forest",
+        # Add other KPIs and their models for RESFOR
+    },
+    "PACFLT": {
+        "NULOs that Remain High Priority": "XGBoost",
+        "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)": "Random Forest",
+        # Add other KPIs and their models for PACFLT
+    },
+}
 
-# The remaining implementation remains the same as the code provided above.
+# Function to load and preprocess data for a BSO
+def load_data(file_path, sheet_name):
+    data = pd.read_excel(file_path, sheet_name=sheet_name)
+    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
+    data = data.dropna(subset=['Date'])  # Drop rows with invalid dates
+    return data
+
+# Function to process predictions for each KPI in a BSO
+def process_kpi_predictions(data, kpi_model_mapping, bso_name):
+    scaler = MinMaxScaler()
+    last_date = data['Date'].max()  # Get the latest date in the data
+    all_predictions = []
+
+    for kpi_column, model_name in kpi_model_mapping.items():
+        if kpi_column in data.columns:
+            print(f"Processing KPI: {kpi_column} for BSO: {bso_name} using {model_name}")
+
+            # Prepare historical data for the current KPI
+            kpi_data = data[['Date', kpi_column]].copy()
+            kpi_data.dropna(subset=[kpi_column], inplace=True)  # Remove rows where KPI is NaN
+
+            if len(kpi_data) < 2:
+                print(f"Skipping {kpi_column}: insufficient data.")
+                continue
+
+            kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
+            X = kpi_data[['DateNumeric']]
+            y = kpi_data[kpi_column]
+
+            X_scaled = scaler.fit_transform(X)
+
+            # Initialize the model
+            if model_name == "Random Forest":
+                model = RandomForestRegressor(random_state=42)
+            elif model_name == "Decision Tree":
+                model = DecisionTreeRegressor(random_state=42)
+            elif model_name == "Linear Regression":
+                model = LinearRegression()
+            elif model_name == "XGBoost":
+                model = XGBRegressor(random_state=42)
+            else:
+                print(f"Unknown model: {model_name}. Skipping KPI {kpi_column}.")
+                continue
+
+            model.fit(X_scaled, y)
+
+            # Generate predictions for the next 3 weeks
+            future_predictions = []
+            current_last_date = last_date
+
+            for _ in range(3):
+                next_date = current_last_date + pd.Timedelta(days=7)
+                next_date_numeric = scaler.transform([[next_date.toordinal()]])[0][0]
+                next_prediction = model.predict([[next_date_numeric]])[0]
+
+                # Ensure non-negative predictions
+                next_prediction = max(0, next_prediction)
+
+                future_predictions.append({
+                    "Date": next_date,
+                    "BSO": bso_name,
+                    "KPI": kpi_column,
+                    "Prediction": next_prediction
+                })
+
+                # Add the prediction to historical data for retraining
+                new_row = {
+                    "Date": next_date,
+                    "DateNumeric": next_date.toordinal(),
+                    kpi_column: next_prediction
+                }
+                kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
+                X = kpi_data[['DateNumeric']]
+                y = kpi_data[kpi_column]
+                X_scaled = scaler.fit_transform(X)
+                model.fit(X_scaled, y)
+
+                current_last_date = next_date
+
+            all_predictions.extend(future_predictions)
+
+    return all_predictions
+
+# Main execution for all BSOs
+final_predictions = []
+for bso, sheet_name in bso_sheets.items():
+    data = load_data(file_path, sheet_name)
+    predictions = process_kpi_predictions(data, kpi_model_mapping[bso], bso)
+    final_predictions.extend(predictions)
+
+# Create a DataFrame from the predictions
+final_predictions_df = pd.DataFrame(final_predictions)
+final_predictions_df['Date'] = final_predictions_df['Date'].dt.strftime('%m/%d/%Y')  # Format dates
+
+# Display the final predictions
+import ace_tools as tools; tools.display_dataframe_to_user(name="Predicted KPI Values", dataframe=final_predictions_df)
