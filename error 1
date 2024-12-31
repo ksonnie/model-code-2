@@ -1,115 +1,76 @@
-%pip install xgboost
-
-import pandas as pd
-import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
-from sklearn.preprocessing import MinMaxScaler
-
-# File path and sheet names
-file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-
-bso_sheets = {
-    "USFFC": "FFC Proj",
-    "RESFOR": "RESFOR Proj",
-    "PACFLT": "PACFLT Proj"
-}
-
-# Prediction details based on R-squared table
-prediction_details = [
-    {"BSO": "USFFC", "KPI": "NULOs that Remain High Priority", "Model": "Random Forest"},
-    {"BSO": "USFFC", "KPI": "Billing exceeds Authorization (Abnormal Unfilled Customer Orders)", "Model": "Decision Tree"},
-    {"BSO": "USFFC", "KPI": "RBC Level- Total Negative Billed", "Model": "XGBoost"},
-    # Add other KPI details
-]
-
-# Function to load data
-def load_data(file_path, sheet_name):
-    data = pd.read_excel(file_path, sheet_name=sheet_name)
-    data['Date'] = pd.to_datetime(data['Date'], errors='coerce')
-    data.dropna(subset=['Date'], inplace=True)
-    return data
-
-# Function to process predictions
-def process_predictions(data, kpi_details):
-    scaler = MinMaxScaler()
-    last_date = data['Date'].max()
-    future_dates = [last_date + pd.Timedelta(days=7 * i) for i in range(1, 4)]
-    prediction_results = pd.DataFrame({'Date': future_dates})
-
-    for detail in kpi_details:
-        kpi = detail["KPI"]
-        model_name = detail["Model"]
-
-        if kpi not in data.columns:
-            continue
-
-        # Prepare historical data
-        kpi_data = data[['Date', kpi]].dropna()
-        if kpi_data.empty:
-            continue
-
-        kpi_data['DateNumeric'] = kpi_data['Date'].map(pd.Timestamp.toordinal)
-        X = kpi_data[['DateNumeric']]
-        y = kpi_data[kpi]
-        X_scaled = scaler.fit_transform(X)
-
-        # Initialize the model
-        if model_name == "Linear Regression":
-            model = LinearRegression()
-        elif model_name == "Decision Tree":
-            model = DecisionTreeRegressor(random_state=42)
-        elif model_name == "Random Forest":
-            model = RandomForestRegressor(random_state=42)
-        elif model_name == "XGBoost":
-            model = XGBRegressor(random_state=42)
-        else:
-            continue
-
-        # Train the model
-        model.fit(X_scaled, y)
-
-        # Generate predictions
-        predictions = []
-        current_last_date = last_date
-        for _ in range(3):
-            next_date_numeric = scaler.transform([[current_last_date.toordinal()]])[0][0]
-            prediction = model.predict([[next_date_numeric]])[0]
-            # Ensure no negative predictions
-            prediction = max(0, prediction)
-            predictions.append(prediction)
-
-            # Update historical data
-            new_row = {'Date': current_last_date, 'DateNumeric': current_last_date.toordinal(), kpi: prediction}
-            kpi_data = pd.concat([kpi_data, pd.DataFrame([new_row])], ignore_index=True)
-            X = kpi_data[['DateNumeric']]
-            y = kpi_data[kpi]
-            X_scaled = scaler.fit_transform(X)
-            model.fit(X_scaled, y)
-
-            # Increment the date
-            current_last_date += pd.Timedelta(days=7)
-
-        # Add predictions to the result
-        prediction_results[kpi] = predictions
-
-    return prediction_results
-
-# Main execution
-final_results = {}
-for bso, sheet_name in bso_sheets.items():
-    print(f"Processing BSO: {bso}")
-    data = load_data(file_path, sheet_name)
-    bso_details = [detail for detail in prediction_details if detail["BSO"] == bso]
-    predictions = process_predictions(data, bso_details)
-    predictions["BSO"] = bso
-    final_results[bso] = predictions
-
-# Combine results for all BSOs
-combined_results = pd.concat(final_results.values(), ignore_index=True)
-combined_results['Date'] = pd.to_datetime(combined_results['Date']).dt.strftime('%m/%d/%Y')  # Format date as mm/dd/yyyy
-
-# Display the final result
-import ace_tools as tools; tools.display_dataframe_to_user(name="Predicted KPI Values", dataframe=combined_results)
+BSO	KPI	R-squared
+USFFC	NULOs Eligible for PO+UMD	0.2462
+USFFC	Labor NULOs that Loads as JV	0.2778
+USFFC	Liquidation exceeds Authorization (Budget Deficits)	0.0199
+USFFC	Dormant Unfilled Customer Orders (UFCOs)	0.5732
+USFFC	Unmatched Disbursements Non-Labor (UMD)	0.5836
+USFFC	Labor UMD	0.0852
+USFFC	Unmatched Collections (UMC)	0.5933
+USFFC	Blank MRI	0.3391
+USFFC	Misaligned MRI	0.3633
+USFFC	Revenue Generating (Excluded) UMT	1
+USFFC	Abnormal Accounts Payable (AAP)	0.3226
+USFFC	Abnormal Accounts Receivable (AAR)	0.6539
+USFFC	Dormant ULOs	0.4224
+USFFC	Contract Contingent Liabilities	1
+USFFC	Negative Liquidations - Labor (DTC: L1, L2)	0.6544
+USFFC	Negative Outstanding Travel Advance	0.6203
+USFFC	Invalid PIINs	0.3374
+USFFC	Blank DOC_TYPE	0.6756
+USFFC	Common Interface File Error (CIF)	0.6505
+USFFC	ZMIL Quantity Issue	0.071
+USFFC	ZMIL Unit Price Mismatch	0.0003
+USFFC	ZMIL Obligation Quantity = 0	0.2776
+USFFC	ZMIL GR Price Mismatch	0.0658
+USFFC	Invalid Buyer's TPN DoDAAC - Private Parties	0.1534
+USFFC	Invalid Buyer's TPN DoDAAC - Inter-Governmental	0.3657
+RESFOR	NULOs Eligible for PO+UMD	0.1209
+RESFOR	Labor NULOs that Loads as JV	0.0513
+RESFOR	Liquidation exceeds Authorization (Budget Deficits)	0.3493
+RESFOR	Dormant Unfilled Customer Orders (UFCOs)	0.5585
+RESFOR	Unmatched Disbursements Non-Labor (UMD)	0.5283
+RESFOR	Labor UMD	0.1663
+RESFOR	Unmatched Collections (UMC)	0.3174
+RESFOR	Blank MRI	1
+RESFOR	Misaligned MRI	1
+RESFOR	Revenue Generating (Excluded) UMT	1
+RESFOR	Abnormal Accounts Payable (AAP)	0.0148
+RESFOR	Abnormal Accounts Receivable (AAR)	0.0389
+RESFOR	Dormant ULOs	0.5664
+RESFOR	Contract Contingent Liabilities	1
+RESFOR	Negative Liquidations - Labor (DTC: L1, L2)	0.0317
+RESFOR	Negative Outstanding Travel Advance	0.7035
+RESFOR	Invalid PIINs	0.555
+RESFOR	Blank DOC_TYPE	0.4324
+RESFOR	Common Interface File Error (CIF)	0.0471
+RESFOR	ZMIL Quantity Issue	0.2907
+RESFOR	ZMIL Unit Price Mismatch	0.2838
+RESFOR	ZMIL Obligation Quantity = 0	0.6572
+RESFOR	ZMIL GR Price Mismatch	0.2145
+RESFOR	Invalid Buyer's TPN DoDAAC - Private Parties	1
+RESFOR	Invalid Buyer's TPN DoDAAC - Inter-Governmental	0.6415
+PACFLT	NULOs Eligible for PO+UMD	0.3163
+PACFLT	Labor NULOs that Loads as JV	0.3949
+PACFLT	Liquidation exceeds Authorization (Budget Deficits)	0.5495
+PACFLT	Dormant Unfilled Customer Orders (UFCOs)	0.2054
+PACFLT	Unmatched Disbursements Non-Labor (UMD)	0.0215
+PACFLT	Labor UMD	0.0225
+PACFLT	Unmatched Collections (UMC)	0.1491
+PACFLT	Blank MRI	0.3763
+PACFLT	Misaligned MRI	0.3584
+PACFLT	Revenue Generating (Excluded) UMT	1
+PACFLT	Abnormal Accounts Payable (AAP)	0.0869
+PACFLT	Abnormal Accounts Receivable (AAR)	0.0522
+PACFLT	Dormant ULOs	0.2086
+PACFLT	Contract Contingent Liabilities	1
+PACFLT	Negative Liquidations - Labor (DTC: L1, L2)	0.0988
+PACFLT	Negative Outstanding Travel Advance	0.0238
+PACFLT	Invalid PIINs	0.4592
+PACFLT	Blank DOC_TYPE	1
+PACFLT	Common Interface File Error (CIF)	0.0629
+PACFLT	ZMIL Quantity Issue	0.0396
+PACFLT	ZMIL Unit Price Mismatch	0.4219
+PACFLT	ZMIL Obligation Quantity = 0	0.2129
+PACFLT	ZMIL GR Price Mismatch	0.0359
+PACFLT	Invalid Buyer's TPN DoDAAC - Private Parties	0.553
+PACFLT	Invalid Buyer's TPN DoDAAC - Inter-Governmental	0.0322
