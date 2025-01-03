@@ -52,8 +52,7 @@ for file_name in files:
                     filtered_df["KPI"] = kpi
                     
                     # Select relevant columns
-                    result_df = filtered_df[["Date", "KPI", "CorrectedRecord?", abs_column, "Cumulative_ABS_Amount"]]
-                    result_df.rename(columns={abs_column: "ABS_Amount"}, inplace=True)
+                    result_df = filtered_df[["Date", "KPI", "CorrectedRecord?", "Cumulative_ABS_Amount"]]
                     
                     # Append to the list
                     processed_data.append(result_df)
