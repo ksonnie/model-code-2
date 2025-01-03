@@ -1,73 +1,21 @@
-import os
-import pandas as pd
-from pyspark.sql import SparkSession
+/Volumes/navy-fip4-prod/dev_data/dev_deaddrop
 
-# Create a Spark session
-spark = SparkSession.builder.appName("ProcessExcelFiles").getOrCreate()
-
-# Define the path to the volume
-volume_path = "/mnt/your-databricks-volume/"
-
-# Initialize an empty list to store processed data
-processed_data = []
-
-# List all files in the directory
-files = dbutils.fs.ls(volume_path)
-
-# Iterate through each file
-for file in files:
-    file_path = file.path
-    file_name = os.path.basename(file_path)
-    
-    # Strictly match the file naming format: tblKPI_AAP_Old_YYYYMMDD KPI.xlsx
-    if file_name.startswith("tblKPI") and "_Old_" in file_name and file_name.endswith("KPI.xlsx"):
-        # Extract the KPI and date from the filename
-        parts = file_name.split("_")
-        if len(parts) >= 4:
-            kpi = parts[1]  # Extract the KPI
-            date_part = parts[3].split(" ")[0]  # Extract the date (YYYYMMDD)
-        
-            # Read the Excel file
-            local_path = f"/dbfs{file_path}"  # Convert Databricks path to local path
-            xls = pd.ExcelFile(local_path)
-            
-            # Determine the sheet name (it should match the first three parts of the file name)
-            sheet_name = "_".join(parts[:3])
-            
-            if sheet_name in xls.sheet_names:
-                # Load the sheet into a DataFrame
-                df = pd.read_excel(local_path, sheet_name=sheet_name)
-                
-                # Dynamically identify the ABS column (e.g., 'ABS_AAP_Amount', 'ABS_XYZ_Amount')
-                abs_column = [col for col in df.columns if col.startswith("ABS_") and col.endswith("_Amount")]
-                if abs_column:
-                    abs_column = abs_column[0]  # Get the first match
-                    
-                    # Filter rows where 'CorrectedRecord?' is TRUE
-                    filtered_df = df[df["CorrectedRecord?"] == True]
-                    
-                    # Calculate the cumulative sum of the identified ABS column
-                    filtered_df["Cumulative_ABS_Amount"] = filtered_df[abs_column].cumsum()
-                    
-                    # Add the date and KPI columns
-                    filtered_df["Date"] = date_part
-                    filtered_df["KPI"] = kpi
-                    
-                    # Select relevant columns
-                    result_df = filtered_df[["Date", "KPI", "CorrectedRecord?", abs_column, "Cumulative_ABS_Amount"]]
-                    result_df.rename(columns={abs_column: "ABS_Amount"}, inplace=True)
-                    
-                    # Append to the list
-                    processed_data.append(result_df)
-
-# Combine all processed data into a single DataFrame
-final_df = pd.concat(processed_data, ignore_index=True)
-
-# Convert the pandas DataFrame to a Spark DataFrame
-final_spark_df = spark.createDataFrame(final_df)
-
-# Display the final DataFrame
-final_spark_df.show()
-
-# Save the result if needed
-final_spark_df.write.format("parquet").save("/mnt/your-databricks-volume/output/result.parquet")
+FileNotFoundError: [Errno 2] No such file or directory: '/dbfsdbfs:/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/tblKPI_AAP_Old_20231211 KPI.xlsx'
+File <command-2794767742109527>, line 32
+     30 # Read the Excel file
+     31 local_path = f"/dbfs{file_path}"  # Convert Databricks path to local path
+---> 32 xls = pd.ExcelFile(local_path)
+     34 # Determine the sheet name (it should match the first three parts of the file name)
+     35 sheet_name = "_".join(parts[:3])
+File /databricks/python/lib/python3.10/site-packages/pandas/io/common.py:865, in get_handle(path_or_buf, mode, encoding, compression, memory_map, is_text, errors, storage_options)
+    856         handle = open(
+    857             handle,
+    858             ioargs.mode,
+   (...)
+    861             newline="",
+    862         )
+    863     else:
+    864         # Binary mode
+--> 865         handle = open(handle, ioargs.mode)
+    866     handles.append(handle)
+    868 # Convert BytesIO or file objects passed with an encoding
