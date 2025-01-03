@@ -7,7 +7,7 @@ from datetime import datetime
 spark = SparkSession.builder.appName("ProcessExcelFiles").getOrCreate()
 
 # Define the path to the volume
-volume_path = "/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/"  # Direct path without /dbfs/
+volume_path = "/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/"  # Direct path to the volume
 
 # Initialize an empty list to store processed data
 processed_data = []
@@ -48,21 +48,18 @@ for file_name in files:
                     # Filter rows where 'CorrectedRecord?' is TRUE
                     filtered_df = df[df["CorrectedRecord?"] == True]
                     
-                    # Calculate the cumulative sum of the identified ABS column
-                    filtered_df["Cumulative_ABS_Amount"] = filtered_df[abs_column].cumsum()
+                    # Calculate the total cumulative sum for the entire file
+                    cumulative_sum = filtered_df[abs_column].sum()
                     
-                    # Add the date and KPI columns
-                    filtered_df["Date"] = date_part
-                    filtered_df["KPI"] = kpi
-                    
-                    # Select relevant columns
-                    result_df = filtered_df[["Date", "KPI", "CorrectedRecord?", "Cumulative_ABS_Amount"]]
-                    
-                    # Append to the list
-                    processed_data.append(result_df)
+                    # Append a single record for this KPI and date
+                    processed_data.append({
+                        "Date": date_part,
+                        "KPI": kpi,
+                        "Cumulative_ABS_Amount": cumulative_sum
+                    })
 
 # Combine all processed data into a single DataFrame
-final_df = pd.concat(processed_data, ignore_index=True)
+final_df = pd.DataFrame(processed_data)
 
 # Convert the pandas DataFrame to a Spark DataFrame
 final_spark_df = spark.createDataFrame(final_df)
