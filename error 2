@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from pyspark.sql import SparkSession
+from datetime import datetime
 
 # Create a Spark session
 spark = SparkSession.builder.appName("ProcessExcelFiles").getOrCreate()
@@ -13,6 +14,9 @@ processed_data = []
 
 # List all files in the directory
 files = os.listdir(volume_path)
+
+# Get the current date in YYYYMMDD format
+current_date = datetime.now().strftime("%Y%m%d")
 
 # Iterate through each file
 for file_name in files:
@@ -66,5 +70,8 @@ final_spark_df = spark.createDataFrame(final_df)
 # Display the final DataFrame
 final_spark_df.show()
 
-# Save the result if needed
-final_spark_df.write.format("parquet").save("/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/output/result.parquet")
+# Define the output path with dynamic file name
+output_path = f"/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/output/result_{current_date}.parquet"
+
+# Save the result, overriding if the file already exists for the same date
+final_spark_df.write.mode("overwrite").format("parquet").save(output_path)
