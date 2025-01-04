@@ -1,89 +1,74 @@
-import os
-import pandas as pd
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, when, sum as spark_sum
+import os
 from datetime import datetime
 
 # Create a Spark session
-spark = SparkSession.builder.appName("ProcessExcelFiles").getOrCreate()
+spark = SparkSession.builder.appName("OptimizedProcessExcelFiles").getOrCreate()
 
 # Define the path to the volume
-volume_path = "/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/"  # Direct path to the volume
-
-# Initialize an empty list to store processed data
-processed_data = []
-
-# List all files in the directory
-files = os.listdir(volume_path)
+volume_path = "/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/"
 
 # Get the current date in YYYYMMDD format
 current_date = datetime.now().strftime("%Y%m%d")
 
+# Initialize an empty DataFrame for final results
+final_df = None
+
+# List all files in the directory
+files = [f for f in os.listdir(volume_path) if f.startswith("tblKPI") and "_Old_" in f and f.endswith("KPI.xlsx")]
+
 # Iterate through each file
 for file_name in files:
     file_path = os.path.join(volume_path, file_name)
-    
-    # Strictly match the file naming format: tblKPI_AAP_Old_YYYYMMDD KPI.xlsx
-    if file_name.startswith("tblKPI") and "_Old_" in file_name and file_name.endswith("KPI.xlsx"):
-        # Extract the KPI and date from the filename
-        parts = file_name.split("_")
-        if len(parts) >= 4:
-            kpi = parts[1]  # Extract the KPI
-            date_part = parts[3].split(" ")[0]  # Extract the date (YYYYMMDD)
-        
+    parts = file_name.split("_")
+    if len(parts) >= 4:
+        kpi = parts[1]
+        date_part = parts[3].split(" ")[0]
+
+        # Load Excel file using Spark
+        try:
             # Read the Excel file
-            xls = pd.ExcelFile(file_path)  # Use the direct path for pd.ExcelFile
-            
-            # Determine the sheet name (it should match the first three parts of the file name)
-            sheet_name = "_".join(parts[:3])
-            
-            if sheet_name in xls.sheet_names:
-                # Load the sheet into a DataFrame
-                df = pd.read_excel(file_path, sheet_name=sheet_name)
-                
-                # Debug: Print available columns to inspect
-                print(f"Columns in file '{file_name}': {df.columns.tolist()}")
-                
-                # Dynamically identify the "CorrectedRecord?" column
-                corrected_record_column = [col for col in df.columns if "CorrectedRecord" in col]
-                
-                if corrected_record_column:
-                    corrected_record_column = corrected_record_column[0]  # Use the first match
-                    
-                    # Filter rows where 'CorrectedRecord?' (or similar) is TRUE
-                    filtered_df = df[df[corrected_record_column] == True]
-                    
-                    # Dynamically identify the ABS column (e.g., 'ABS_AAP_Amount', 'ABS_XYZ_Amount')
-                    abs_column = [col for col in df.columns if col.startswith("ABS_") and col.endswith("_Amount")]
-                    if abs_column:
-                        abs_column = abs_column[0]  # Get the first match
-                        
-                        # Calculate the total cumulative sum for the entire file
-                        cumulative_sum = filtered_df[abs_column].sum()
-                        
-                        # Append a single record for this KPI and date
-                        processed_data.append({
-                            "Date": date_part,
-                            "KPI": kpi,
-                            "Cumulative_ABS_Amount": cumulative_sum
-                        })
-                    else:
-                        print(f"Warning: ABS column not found in file '{file_name}'. Skipping this file.")
-                else:
-                    print(f"Warning: 'CorrectedRecord?' column not found in file '{file_name}'. Skipping this file.")
+            df = spark.read.format("com.crealytics.spark.excel") \
+                .option("header", "true") \
+                .option("inferSchema", "true") \
+                .option("dataAddress", f"'{parts[0]}_{parts[1]}_{parts[2]}$'") \
+                .load(file_path)
+
+            # Dynamically identify the 'CorrectedRecord?' column
+            corrected_record_col = next((c for c in df.columns if "CorrectedRecord" in c), None)
+            if not corrected_record_col:
+                print(f"Warning: 'CorrectedRecord?' column not found in file '{file_name}'. Skipping.")
+                continue
+
+            # Dynamically identify the ABS column
+            abs_column = next((c for c in df.columns if c.startswith("ABS_") and c.endswith("_Amount")), None)
+            if not abs_column:
+                print(f"Warning: ABS column not found in file '{file_name}'. Skipping.")
+                continue
+
+            # Filter and aggregate data
+            filtered_df = df.filter(col(corrected_record_col) == lit(True)) \
+                            .select(abs_column) \
+                            .groupBy() \
+                            .agg(spark_sum(col(abs_column)).alias("Cumulative_ABS_Amount"))
+
+            # Add Date and KPI as new columns
+            filtered_df = filtered_df.withColumn("Date", lit(date_part)).withColumn("KPI", lit(kpi))
+
+            # Append results
+            if final_df is None:
+                final_df = filtered_df
             else:
-                print(f"Warning: Sheet '{sheet_name}' not found in file '{file_name}'. Skipping this file.")
+                final_df = final_df.union(filtered_df)
 
-# Combine all processed data into a single DataFrame
-final_df = pd.DataFrame(processed_data)
+        except Exception as e:
+            print(f"Error processing file '{file_name}': {e}")
 
-# Convert the pandas DataFrame to a Spark DataFrame
-final_spark_df = spark.createDataFrame(final_df)
-
-# Display the final DataFrame
-final_spark_df.show()
-
-# Define the output path with dynamic file name
-output_path = f"/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/output/result_{current_date}.parquet"
-
-# Save the result, overriding if the file already exists for the same date
-final_spark_df.write.mode("overwrite").format("parquet").save(output_path)
+# Write the final result
+if final_df:
+    output_path = f"/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/output/result_{current_date}.parquet"
+    final_df.write.mode("overwrite").parquet(output_path)
+    print(f"Results written to {output_path}.")
+else:
+    print("No valid data processed.")
