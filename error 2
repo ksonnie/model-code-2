@@ -1,34 +1,89 @@
-KeyError: 'CorrectedRecord?'
-File /databricks/python/lib/python3.10/site-packages/pandas/core/indexes/base.py:3802, in Index.get_loc(self, key, method, tolerance)
-   3801 try:
--> 3802     return self._engine.get_loc(casted_key)
-   3803 except KeyError as err:
-File /databricks/python/lib/python3.10/site-packages/pandas/_libs/index.pyx:138, in pandas._libs.index.IndexEngine.get_loc()
-File /databricks/python/lib/python3.10/site-packages/pandas/_libs/index.pyx:165, in pandas._libs.index.IndexEngine.get_loc()
-File pandas/_libs/hashtable_class_helper.pxi:5745, in pandas._libs.hashtable.PyObjectHashTable.get_item()
-File pandas/_libs/hashtable_class_helper.pxi:5753, in pandas._libs.hashtable.PyObjectHashTable.get_item()
-KeyError: 'CorrectedRecord?'
+import os
+import pandas as pd
+from pyspark.sql import SparkSession
+from datetime import datetime
 
-The above exception was the direct cause of the following exception:
-KeyError                                  Traceback (most recent call last)
-File <command-2794767742109527>, line 49
-     46 abs_column = abs_column[0]  # Get the first match
-     48 # Filter rows where 'CorrectedRecord?' is TRUE
----> 49 filtered_df = df[df["CorrectedRecord?"] == True]
-     51 # Calculate the total cumulative sum for the entire file
-     52 cumulative_sum = filtered_df[abs_column].sum()
-File /databricks/python/lib/python3.10/site-packages/pandas/core/frame.py:3807, in DataFrame.__getitem__(self, key)
-   3805 if self.columns.nlevels > 1:
-   3806     return self._getitem_multilevel(key)
--> 3807 indexer = self.columns.get_loc(key)
-   3808 if is_integer(indexer):
-   3809     indexer = [indexer]
-File /databricks/python/lib/python3.10/site-packages/pandas/core/indexes/base.py:3804, in Index.get_loc(self, key, method, tolerance)
-   3802     return self._engine.get_loc(casted_key)
-   3803 except KeyError as err:
--> 3804     raise KeyError(key) from err
-   3805 except TypeError:
-   3806     # If we have a listlike key, _check_indexing_error will raise
-   3807     #  InvalidIndexError. Otherwise we fall through and re-raise
-   3808     #  the TypeError.
-   3809     self._check_indexing_error(key)
+# Create a Spark session
+spark = SparkSession.builder.appName("ProcessExcelFiles").getOrCreate()
+
+# Define the path to the volume
+volume_path = "/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/"  # Direct path to the volume
+
+# Initialize an empty list to store processed data
+processed_data = []
+
+# List all files in the directory
+files = os.listdir(volume_path)
+
+# Get the current date in YYYYMMDD format
+current_date = datetime.now().strftime("%Y%m%d")
+
+# Iterate through each file
+for file_name in files:
+    file_path = os.path.join(volume_path, file_name)
+    
+    # Strictly match the file naming format: tblKPI_AAP_Old_YYYYMMDD KPI.xlsx
+    if file_name.startswith("tblKPI") and "_Old_" in file_name and file_name.endswith("KPI.xlsx"):
+        # Extract the KPI and date from the filename
+        parts = file_name.split("_")
+        if len(parts) >= 4:
+            kpi = parts[1]  # Extract the KPI
+            date_part = parts[3].split(" ")[0]  # Extract the date (YYYYMMDD)
+        
+            # Read the Excel file
+            xls = pd.ExcelFile(file_path)  # Use the direct path for pd.ExcelFile
+            
+            # Determine the sheet name (it should match the first three parts of the file name)
+            sheet_name = "_".join(parts[:3])
+            
+            if sheet_name in xls.sheet_names:
+                # Load the sheet into a DataFrame
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                
+                # Debug: Print available columns to inspect
+                print(f"Columns in file '{file_name}': {df.columns.tolist()}")
+                
+                # Dynamically identify the "CorrectedRecord?" column
+                corrected_record_column = [col for col in df.columns if "CorrectedRecord" in col]
+                
+                if corrected_record_column:
+                    corrected_record_column = corrected_record_column[0]  # Use the first match
+                    
+                    # Filter rows where 'CorrectedRecord?' (or similar) is TRUE
+                    filtered_df = df[df[corrected_record_column] == True]
+                    
+                    # Dynamically identify the ABS column (e.g., 'ABS_AAP_Amount', 'ABS_XYZ_Amount')
+                    abs_column = [col for col in df.columns if col.startswith("ABS_") and col.endswith("_Amount")]
+                    if abs_column:
+                        abs_column = abs_column[0]  # Get the first match
+                        
+                        # Calculate the total cumulative sum for the entire file
+                        cumulative_sum = filtered_df[abs_column].sum()
+                        
+                        # Append a single record for this KPI and date
+                        processed_data.append({
+                            "Date": date_part,
+                            "KPI": kpi,
+                            "Cumulative_ABS_Amount": cumulative_sum
+                        })
+                    else:
+                        print(f"Warning: ABS column not found in file '{file_name}'. Skipping this file.")
+                else:
+                    print(f"Warning: 'CorrectedRecord?' column not found in file '{file_name}'. Skipping this file.")
+            else:
+                print(f"Warning: Sheet '{sheet_name}' not found in file '{file_name}'. Skipping this file.")
+
+# Combine all processed data into a single DataFrame
+final_df = pd.DataFrame(processed_data)
+
+# Convert the pandas DataFrame to a Spark DataFrame
+final_spark_df = spark.createDataFrame(final_df)
+
+# Display the final DataFrame
+final_spark_df.show()
+
+# Define the output path with dynamic file name
+output_path = f"/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/output/result_{current_date}.parquet"
+
+# Save the result, overriding if the file already exists for the same date
+final_spark_df.write.mode("overwrite").format("parquet").save(output_path)
