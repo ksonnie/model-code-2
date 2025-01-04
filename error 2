@@ -1,10 +1,7 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, when, sum as spark_sum
 import os
+import pandas as pd
 from datetime import datetime
-
-# Create a Spark session
-spark = SparkSession.builder.appName("OptimizedProcessExcelFiles").getOrCreate()
+from multiprocessing import Pool
 
 # Define the path to the volume
 volume_path = "/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/"
@@ -12,63 +9,62 @@ volume_path = "/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/"
 # Get the current date in YYYYMMDD format
 current_date = datetime.now().strftime("%Y%m%d")
 
-# Initialize an empty DataFrame for final results
-final_df = None
-
-# List all files in the directory
-files = [f for f in os.listdir(volume_path) if f.startswith("tblKPI") and "_Old_" in f and f.endswith("KPI.xlsx")]
-
-# Iterate through each file
-for file_name in files:
+# Function to process a single file
+def process_file(file_name):
     file_path = os.path.join(volume_path, file_name)
     parts = file_name.split("_")
-    if len(parts) >= 4:
-        kpi = parts[1]
-        date_part = parts[3].split(" ")[0]
+    if len(parts) < 4:
+        return None
+    kpi = parts[1]
+    date_part = parts[3].split(" ")[0]
 
-        # Load Excel file using Spark
-        try:
-            # Read the Excel file
-            df = spark.read.format("com.crealytics.spark.excel") \
-                .option("header", "true") \
-                .option("inferSchema", "true") \
-                .option("dataAddress", f"'{parts[0]}_{parts[1]}_{parts[2]}$'") \
-                .load(file_path)
+    try:
+        # Load Excel file
+        xls = pd.ExcelFile(file_path)
+        sheet_name = "_".join(parts[:3])
+        if sheet_name not in xls.sheet_names:
+            print(f"Warning: Sheet '{sheet_name}' not found in file '{file_name}'. Skipping.")
+            return None
 
-            # Dynamically identify the 'CorrectedRecord?' column
-            corrected_record_col = next((c for c in df.columns if "CorrectedRecord" in c), None)
-            if not corrected_record_col:
-                print(f"Warning: 'CorrectedRecord?' column not found in file '{file_name}'. Skipping.")
-                continue
+        # Read sheet
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
 
-            # Dynamically identify the ABS column
-            abs_column = next((c for c in df.columns if c.startswith("ABS_") and c.endswith("_Amount")), None)
-            if not abs_column:
-                print(f"Warning: ABS column not found in file '{file_name}'. Skipping.")
-                continue
+        # Dynamically identify the required columns
+        corrected_record_col = next((c for c in df.columns if "CorrectedRecord" in c), None)
+        abs_column = next((c for c in df.columns if c.startswith("ABS_") and c.endswith("_Amount")), None)
 
-            # Filter and aggregate data
-            filtered_df = df.filter(col(corrected_record_col) == lit(True)) \
-                            .select(abs_column) \
-                            .groupBy() \
-                            .agg(spark_sum(col(abs_column)).alias("Cumulative_ABS_Amount"))
+        if not corrected_record_col or not abs_column:
+            print(f"Warning: Required columns not found in file '{file_name}'. Skipping.")
+            return None
 
-            # Add Date and KPI as new columns
-            filtered_df = filtered_df.withColumn("Date", lit(date_part)).withColumn("KPI", lit(kpi))
+        # Filter and calculate cumulative sum
+        filtered_df = df[df[corrected_record_col] == True]
+        cumulative_sum = filtered_df[abs_column].sum()
 
-            # Append results
-            if final_df is None:
-                final_df = filtered_df
-            else:
-                final_df = final_df.union(filtered_df)
+        # Return a single record
+        return {"Date": date_part, "KPI": kpi, "Cumulative_ABS_Amount": cumulative_sum}
 
-        except Exception as e:
-            print(f"Error processing file '{file_name}': {e}")
+    except Exception as e:
+        print(f"Error processing file '{file_name}': {e}")
+        return None
 
-# Write the final result
-if final_df:
-    output_path = f"/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/output/result_{current_date}.parquet"
-    final_df.write.mode("overwrite").parquet(output_path)
+# List all files to process
+files = [f for f in os.listdir(volume_path) if f.startswith("tblKPI") and "_Old_" in f and f.endswith("KPI.xlsx")]
+
+# Use multiprocessing to process files in parallel
+with Pool() as pool:
+    results = pool.map(process_file, files)
+
+# Filter out None results
+processed_data = [r for r in results if r is not None]
+
+# Create final DataFrame
+final_df = pd.DataFrame(processed_data)
+
+# Save the result
+output_path = f"/Volumes/navy-fip4-prod/dev_data/dev_deaddrop/output/result_{current_date}.parquet"
+if not final_df.empty:
+    final_df.to_parquet(output_path, index=False)
     print(f"Results written to {output_path}.")
 else:
     print("No valid data processed.")
