@@ -2,30 +2,28 @@ import pandas as pd
 from openpyxl import load_workbook
 
 # Step 1: Define file paths
-csv_file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/BSO_Proj.csv"
 input_excel_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
 output_excel_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All Bso file output/All BSOs Dashboards Updated.xlsx"
 
-# Step 2: Load the CSV file into a DataFrame
-try:
-    bso_proj_df = pd.read_csv(csv_file_path)
-except Exception as e:
-    raise FileNotFoundError(f"Error: Unable to load the CSV file. {e}")
+# Step 2: Example DataFrame to append
+# Replace this with your actual DataFrame
+new_sheet_df = pd.DataFrame({
+    "Column1": [1, 2, 3],
+    "Column2": ['A', 'B', 'C'],
+    "Column3": [4.5, 5.5, 6.5]
+})
 
-# Step 3: Create a new Excel file with all sheets from the original file
+# Step 3: Add the DataFrame as a new sheet
 try:
-    with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
-        # Load the original Excel workbook
-        workbook = load_workbook(input_excel_path)
-        
-        # Iterate over each sheet in the workbook and save it to the new file
-        for sheet_name in workbook.sheetnames:
-            sheet_data = pd.read_excel(input_excel_path, sheet_name=sheet_name, engine='openpyxl')
-            sheet_data.to_excel(writer, sheet_name=sheet_name, index=False)
-        
-        # Add the new sheet from the CSV file
-        bso_proj_df.to_excel(writer, sheet_name='BSO_Proj', index=False)
+    # Load the existing workbook
+    with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a') as writer:
+        # Append the DataFrame as a new sheet
+        new_sheet_df.to_excel(writer, sheet_name='New_Sheet', index=False)
     
-    print(f"Updated Excel file has been saved to: {output_excel_path}")
+    print(f"New sheet successfully added to: {output_excel_path}")
+except FileNotFoundError:
+    print("Error: Input Excel file not found. Check the file path.")
+except ValueError as e:
+    print(f"Error: {e}. Ensure the sheet name is unique and Excel file is valid.")
 except Exception as e:
-    raise RuntimeError(f"Error while processing Excel sheets: {e}")
+    print(f"An unexpected error occurred: {e}")
