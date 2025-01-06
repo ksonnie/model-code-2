@@ -1,26 +1,31 @@
 import pandas as pd
 from openpyxl import load_workbook
 
-# Step 1: Load the BSO_Proj.csv file into a DataFrame
-bso_proj_df = pd.read_csv("/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/BSO_Proj.csv")
+# Step 1: Define file paths
+csv_file_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/BSO_Proj.csv"
+input_excel_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
+output_excel_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All Bso file output/All BSOs Dashboards Updated.xlsx"
 
-# Step 2: Define the path of the original Excel file and the new Excel file
-excel_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All BSOs Dashboards.xlsx"
-new_excel_path = "/Volumes/navy-fip4-ya-dev/data_cleansing_dev/visualization_dev/All Bso file output/All BSOs Dashboards Updated.xlsx"
+# Step 2: Load the CSV file into a DataFrame
+try:
+    bso_proj_df = pd.read_csv(csv_file_path)
+except Exception as e:
+    raise FileNotFoundError(f"Error: Unable to load the CSV file. {e}")
 
-# Step 3: Load the existing Excel file using openpyxl
-workbook = load_workbook(excel_path)
-
-# Step 4: Append the new sheet 'BSO_Proj' to the workbook
-# Create a new Excel file with the same content as the original workbook
-with pd.ExcelWriter(new_excel_path, engine='openpyxl') as excel_writer:
-    # Write each existing sheet to the new Excel file
-    for sheet_name in workbook.sheetnames:
-        sheet_data = pd.read_excel(excel_path, sheet_name=sheet_name)
-        sheet_data.to_excel(excel_writer, sheet_name=sheet_name, index=False)
-
-    # Step 5: Add the new sheet (BSO_Proj) with data from the CSV
-    bso_proj_df.to_excel(excel_writer, sheet_name='BSO_Proj', index=False)
-
-# Step 6: Save the updated Excel file
-print(f"Updated Excel file saved to {new_excel_path}")
+# Step 3: Create a new Excel file with all sheets from the original file
+try:
+    with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
+        # Load the original Excel workbook
+        workbook = load_workbook(input_excel_path)
+        
+        # Iterate over each sheet in the workbook and save it to the new file
+        for sheet_name in workbook.sheetnames:
+            sheet_data = pd.read_excel(input_excel_path, sheet_name=sheet_name, engine='openpyxl')
+            sheet_data.to_excel(writer, sheet_name=sheet_name, index=False)
+        
+        # Add the new sheet from the CSV file
+        bso_proj_df.to_excel(writer, sheet_name='BSO_Proj', index=False)
+    
+    print(f"Updated Excel file has been saved to: {output_excel_path}")
+except Exception as e:
+    raise RuntimeError(f"Error while processing Excel sheets: {e}")
