@@ -13,17 +13,24 @@ new_sheet_df = pd.DataFrame({
     "Column3": [4.5, 5.5, 6.5]
 })
 
-# Step 3: Add the DataFrame as a new sheet
+# Step 3: Append the DataFrame as a new sheet
 try:
     # Load the existing workbook
+    book = load_workbook(input_excel_path)
+    
+    # Create an ExcelWriter object with the workbook loaded
     with pd.ExcelWriter(output_excel_path, engine='openpyxl', mode='a') as writer:
-        # Append the DataFrame as a new sheet
+        # Attach the loaded workbook to the writer
+        writer.book = book
+        writer.sheets = {sheet: book[sheet] for sheet in book.sheetnames}
+        
+        # Write the new DataFrame as a new sheet
         new_sheet_df.to_excel(writer, sheet_name='New_Sheet', index=False)
     
     print(f"New sheet successfully added to: {output_excel_path}")
 except FileNotFoundError:
     print("Error: Input Excel file not found. Check the file path.")
 except ValueError as e:
-    print(f"Error: {e}. Ensure the sheet name is unique and Excel file is valid.")
+    print(f"Error: {e}. Ensure the sheet name is unique.")
 except Exception as e:
     print(f"An unexpected error occurred: {e}")
